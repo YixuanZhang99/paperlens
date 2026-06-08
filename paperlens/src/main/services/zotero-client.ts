@@ -53,5 +53,21 @@ export function createZoteroClient(deps: ZoteroDeps) {
     return items.filter(i => PAPER_TYPES.has(i.data.itemType)).map(toPaper)
   }
 
-  return { listPapers }
+  async function findPdfAttachment(parentKey: string): Promise<string | null> {
+    const url = `${base}/users/${deps.userId}/items/${parentKey}/children`
+    const res = await deps.fetch(url, { headers })
+    if (!res.ok) throw new Error(`Zotero children failed: ${res.status}`)
+    const children = (await res.json()) as Array<{ data: { key: string; itemType: string; contentType?: string } }>
+    const pdf = children.find(c => c.data.itemType === 'attachment' && c.data.contentType === 'application/pdf')
+    return pdf ? pdf.data.key : null
+  }
+
+  async function downloadAttachment(attachmentKey: string): Promise<ArrayBuffer> {
+    const url = `${base}/users/${deps.userId}/items/${attachmentKey}/file`
+    const res = await deps.fetch(url, { headers })
+    if (!res.ok) throw new Error(`Zotero file download failed: ${res.status}`)
+    return res.arrayBuffer()
+  }
+
+  return { listPapers, findPdfAttachment, downloadAttachment }
 }
