@@ -19,8 +19,10 @@ export function registerIpc(c: Container) {
     if (cached) return cached.text
     const bytes = new Uint8Array(await z.downloadAttachment(attKey))
     const text = await extractPdfText(bytes)
-    c.db.prepare('INSERT OR REPLACE INTO pdf_cache (attachment_key, text, cached_at) VALUES (?, ?, ?)')
-      .run(attKey, text, Date.now())
+    if (text) {
+      c.db.prepare('INSERT OR REPLACE INTO pdf_cache (attachment_key, text, cached_at) VALUES (?, ?, ?)')
+        .run(attKey, text, Date.now())
+    }
     return text
   })
 
