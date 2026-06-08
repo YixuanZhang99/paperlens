@@ -20,3 +20,27 @@ export function buildMessages(input: BuildMessagesInput): ChatMessage[] {
   }
   return [system, ...input.history, { role: 'user', content: input.userInput }]
 }
+
+export interface AiChatDeps {
+  apiKey: string
+  model: string
+  fetch: typeof fetch
+  baseUrl?: string
+}
+
+export function createAiChat(deps: AiChatDeps) {
+  const url = `${deps.baseUrl ?? 'https://api.deepseek.com'}/chat/completions`
+
+  async function complete(messages: ChatMessage[]): Promise<string> {
+    const res = await deps.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
+      body: JSON.stringify({ model: deps.model, messages, stream: false }),
+    })
+    if (!res.ok) throw new Error(`DeepSeek request failed: ${res.status}`)
+    const data = (await res.json()) as { choices: Array<{ message: { content: string } }> }
+    return data.choices[0]?.message?.content ?? ''
+  }
+
+  return { complete }
+}
