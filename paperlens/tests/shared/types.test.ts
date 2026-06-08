@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PaperSchema, NoteSchema, AppConfigSchema } from '@shared/types'
+import { PaperSchema, NoteSchema, AppConfigSchema, ChatMessageSchema } from '@shared/types'
 
 describe('shared schemas', () => {
   it('parses a valid paper', () => {
@@ -30,5 +30,14 @@ describe('shared schemas', () => {
     const c = AppConfigSchema.parse({})
     expect(c.zoteroUserId).toBe('')
     expect(c.deepseekModel).toBe('deepseek-chat')
+  })
+
+  it('parses a valid chat message', () => {
+    const m = ChatMessageSchema.parse({ role: 'user', content: 'hi' })
+    expect(m.role).toBe('user')
+  })
+
+  it('rejects a chat message with an invalid role', () => {
+    expect(() => ChatMessageSchema.parse({ role: 'bad', content: 'x' })).toThrow()
   })
 })
