@@ -29,6 +29,10 @@ describe('createNotionSync.sync', () => {
     const [url, init] = fetch.mock.calls[0]!
     expect(url).toBe('https://api.notion.com/v1/pages/p9')
     expect(init!.method).toBe('PATCH')
+    const body = JSON.parse(init!.body as string)
+    expect(body.properties).toBeDefined()
+    expect(body.parent).toBeUndefined()
+    expect(body.children).toBeUndefined()
   })
 
   it('throws with notion error detail on failure', async () => {
