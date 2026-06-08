@@ -6,7 +6,7 @@ import { registerIpc } from './ipc'
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400, height: 900,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false },
+    webPreferences: { preload: join(__dirname, '../preload/index.mjs'), sandbox: false },
   })
   if (process.env['ELECTRON_RENDERER_URL']) win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   else win.loadFile(join(__dirname, '../renderer/index.html'))
