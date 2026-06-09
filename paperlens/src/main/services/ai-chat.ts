@@ -42,5 +42,43 @@ export function createAiChat(deps: AiChatDeps) {
     return data.choices[0]?.message?.content ?? ''
   }
 
-  return { complete }
+  async function stream(messages: ChatMessage[], onToken: (delta: string) => void): Promise<string> {
+    const res = await deps.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
+      body: JSON.stringify({ model: deps.model, messages, stream: true }),
+    })
+    if (!res.ok) throw new Error(`DeepSeek stream failed: ${res.status}`)
+    if (!res.body) throw new Error('DeepSeek stream: empty body')
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let full = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? '' // keep the trailing (possibly incomplete) line in the buffer
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (payload === '' || payload === '[DONE]') continue
+        try {
+          const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> }
+          const delta = json.choices?.[0]?.delta?.content
+          if (delta) {
+            full += delta
+            onToken(delta)
+          }
+        } catch {
+          // ignore malformed/partial JSON lines
+        }
+      }
+    }
+    return full
+  }
+
+  return { complete, stream }
 }
