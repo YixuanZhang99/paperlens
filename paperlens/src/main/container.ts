@@ -1,12 +1,14 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import { migrate } from './services/db'
 import { createConfigStore } from './services/config-store'
 import { createNotesRepo } from './services/notes-repo'
 import { createZoteroClient } from './services/zotero-client'
+import { createZoteroLocal } from './services/zotero-local'
 import { createAiChat } from './services/ai-chat'
 import { createNotionSync } from './services/notion-sync'
 
@@ -45,7 +47,14 @@ export function createContainer() {
   const zotero = () => createZoteroClient({ apiKey: cfg().zoteroApiKey, userId: cfg().zoteroUserId, fetch })
   const ai = () => createAiChat({ apiKey: cfg().deepseekApiKey, model: cfg().deepseekModel, fetch })
   const notion = () => createNotionSync({ token: cfg().notionToken, databaseId: cfg().notionDatabaseId, fetch })
+  const zoteroLocal = () => createZoteroLocal({
+    dataDir: cfg().zoteroDataDir || join(os.homedir(), 'Zotero'),
+    exists: (p) => fs.existsSync(p),
+    readFile: (p) => fs.readFileSync(p),
+    readdir: (p) => fs.readdirSync(p),
+    join: (...parts) => join(...parts),
+  })
 
-  return { configStore, db, notesRepo, zotero, ai, notion }
+  return { configStore, db, notesRepo, zotero, ai, notion, zoteroLocal }
 }
 export type Container = ReturnType<typeof createContainer>
