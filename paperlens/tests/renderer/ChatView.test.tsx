@@ -5,10 +5,14 @@ import { ChatView } from '../../src/renderer/components/ChatView'
 const paper = { key: 'P1', title: 'T', authors: ['A'], year: 2020, abstract: '', attachmentKey: null }
 
 describe('ChatView', () => {
-  it('sends user input and renders assistant reply', async () => {
+  it('streams the assistant reply and shows the accumulated text', async () => {
+    const streamChat = vi.fn(async (_args: any, onToken: (d: string) => void) => {
+      onToken('这是'); onToken('AI'); onToken('的回答')
+      return '这是AI的回答'
+    })
     ;(window as any).api = {
       getPaperText: vi.fn(async () => '论文全文'),
-      sendChat: vi.fn(async () => '这是AI的回答'),
+      streamChat,
     }
     render(<ChatView paper={paper} />)
 
@@ -17,8 +21,9 @@ describe('ChatView', () => {
 
     expect(await screen.findByText('讲讲贡献')).toBeInTheDocument()
     expect(await screen.findByText('这是AI的回答')).toBeInTheDocument()
-    expect((window as any).api.sendChat).toHaveBeenCalledWith(
-      expect.objectContaining({ input: '讲讲贡献', paper })
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({ input: '讲讲贡献', paper }),
+      expect.any(Function),
     )
   })
 
@@ -26,7 +31,9 @@ describe('ChatView', () => {
     const addNote = vi.fn(async () => ({}))
     ;(window as any).api = {
       getPaperText: vi.fn(async () => 'x'),
-      sendChat: vi.fn(async () => '可保存的学习要点'),
+      streamChat: vi.fn(async (_args: any, onToken: (d: string) => void) => {
+        onToken('可保存的学习要点'); return '可保存的学习要点'
+      }),
       addNote,
     }
     render(<ChatView paper={paper} />)

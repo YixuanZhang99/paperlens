@@ -39,6 +39,11 @@ export function registerIpc(c: Container) {
     return c.ai().complete(messages)
   })
 
+  ipcMain.handle('chat:stream', async (event, args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }) => {
+    const messages = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
+    return c.ai().stream(messages, (delta) => event.sender.send('chat:token', delta))
+  })
+
   ipcMain.handle('notes:add', (_e, n: { paperKey: string; content: string; tags: string[] }) => c.notesRepo.add(n))
   ipcMain.handle('notes:list', (_e, paperKey: string) => c.notesRepo.listByPaper(paperKey))
 

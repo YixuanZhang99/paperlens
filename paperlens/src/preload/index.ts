@@ -9,6 +9,16 @@ const api = {
   getPaperPdf: (paper: Paper): Promise<ArrayBuffer | null> => ipcRenderer.invoke('paper:pdfBytes', paper),
   sendChat: (a: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }): Promise<string> =>
     ipcRenderer.invoke('chat:send', a),
+  streamChat: (
+    args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string },
+    onToken: (delta: string) => void,
+  ): Promise<string> => {
+    const listener = (_e: Electron.IpcRendererEvent, delta: string) => onToken(delta)
+    ipcRenderer.on('chat:token', listener)
+    return ipcRenderer.invoke('chat:stream', args).finally(() => {
+      ipcRenderer.removeListener('chat:token', listener)
+    })
+  },
   addNote: (n: { paperKey: string; content: string; tags: string[] }): Promise<Note> =>
     ipcRenderer.invoke('notes:add', n),
   listNotes: (paperKey: string): Promise<Note[]> => ipcRenderer.invoke('notes:list', paperKey),
