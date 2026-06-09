@@ -6,6 +6,10 @@ import { describe, it, expect } from 'vitest'
 import { createZoteroClient } from '../../src/main/services/zotero-client'
 import { createAiChat, buildMessages } from '../../src/main/services/ai-chat'
 import { extractPdfText } from '../../src/main/services/pdf-service'
+import { createZoteroLocal } from '../../src/main/services/zotero-local'
+import fs from 'node:fs'
+import { join } from 'node:path'
+import os from 'node:os'
 
 const E = process.env
 const hasZotero = !!(E.ZOTERO_USER_ID && E.ZOTERO_API_KEY)
@@ -35,7 +39,7 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
 
         // Diagnose attachments across ALL papers: linkMode + md5/mtime (md5 present ⇒
         // file metadata registered for sync; if /file still 404s ⇒ likely WebDAV, not Zotero storage).
-        const imported: { paper: typeof papers[number]; key: string; md5: string | null }[] = []
+        const imported: { paper: typeof papers[number]; key: string; md5: string | null; filename: string }[] = []
         let pdfCount = 0, importedCount = 0, linkedCount = 0, withMd5 = 0
         for (const p of papers) {
           const res = await fetch(`${base}/users/${E.ZOTERO_USER_ID}/items/${p.key}/children`, { headers })
@@ -48,7 +52,7 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
               if (d.linkMode === 'imported_file' || d.linkMode === 'imported_url') {
                 importedCount++
                 if (d.md5) withMd5++
-                imported.push({ paper: p, key: d.key, md5: d.md5 ?? null })
+                imported.push({ paper: p, key: d.key, md5: d.md5 ?? null, filename: d.filename ?? '' })
               } else linkedCount++
             }
           }
@@ -83,6 +87,31 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
           else
             log('Zotero FINDING: imported attachments have NO md5 → files were never uploaded to Zotero storage (sync still running, OR file syncing not actually enabled / quota exceeded). Re-check after sync completes; verify Settings→Sync→File Syncing uses "Zotero" (not "WebDAV"/off).')
         }
+
+        // --- LOCAL STORAGE read = the production path (LB-1..LB-4) for WebDAV/local users ---
+        const dataDir = E.ZOTERO_DATA_DIR || join(os.homedir(), 'Zotero')
+        const local = createZoteroLocal({
+          dataDir,
+          exists: (p) => fs.existsSync(p),
+          readFile: (p) => new Uint8Array(fs.readFileSync(p)),
+          readdir: (p) => fs.readdirSync(p),
+          join: (...parts) => join(...parts),
+        })
+        let localOk = 0
+        for (const it of imported.slice(0, 5)) {
+          const localBytes = local.readPdf(it.key, it.filename)
+          if (localBytes) {
+            localOk++
+            log(`Zotero LOCAL: ✓ read "${short(it.paper.title, 45)}" from ${dataDir}/storage/${it.key}/ → ${localBytes.byteLength} bytes`)
+            if (!paperText) {
+              paperTitle = it.paper.title
+              paperText = await extractPdfText(localBytes)
+              log(`pdf.js (LOCAL): extracted ${paperText.length} chars; preview → ${short(paperText.replace(/\s+/g, ' '), 160)}`)
+            }
+          }
+        }
+        log(`Zotero LOCAL read (up to 5) from ${dataDir}: ${localOk} ok`)
+        if (localOk > 0) log('Zotero LOCAL FINDING: ✅ local-storage PDF path WORKS — Web-API 404 bypassed by reading ~/Zotero/storage directly. In-app PDF + AI full-text are usable.')
       } catch (e) {
         log('Zotero ERROR →', (e as Error).message)
       }
