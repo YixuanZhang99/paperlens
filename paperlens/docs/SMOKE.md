@@ -1,6 +1,10 @@
 # PaperLens 手动冒烟清单
 
-> 自动化测试（`npm test`，40 项）覆盖所有服务逻辑与 UI 交互（含 SSE 流式解析、PDF 标签）；`npm run build` 验证可打包，`npm run dist` 已实测产出 macOS dmg。以下为需要真实凭证、必须人工执行的端到端验证。
+> 自动化测试（`npm test`，48 项）覆盖所有服务逻辑与 UI 交互（含 SSE 流式解析、PDF 标签）。其中：
+> - **真实 HTTP + 真实 pdf.js 端到端**（`tests/e2e/api-integration.test.ts`）：本地服务器 + 真实 `fetch` 跑实际 Zotero/DeepSeek（complete+stream）/Notion 客户端，并用真实 pdf.js 抽取一份手工 PDF——验证真实网络/解析/流式路径。
+> - **Electron 启动冒烟**（`npm run e2e:electron`，需 GUI 会话）：用真实构建的 preload+renderer 开窗，断言 `window.api` 注入、全部方法到位、IPC 往返成功——抓住 preload 路径类的运行时 bug。
+>
+> `npm run build` 验证可打包，`npm run dist` 已实测产出 macOS dmg。以下为需要**真实凭证**、必须人工执行的端到端验证（自动化测试无法覆盖真实第三方 API 与可视 GUI）。
 
 ## 前置：准备凭证
 启动后点击左上角「⚙ 设置」，填入：
