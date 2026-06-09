@@ -30,4 +30,27 @@ describe('buildMessages', () => {
     })
     expect(msgs.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'user'])
   })
+
+  it('caps history to the most recent maxHistoryMessages', () => {
+    const history = Array.from({ length: 30 }, (_, i) => ({
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: `m${i}`,
+    }))
+    const msgs = buildMessages({ paper, paperText: 'x', history, userInput: '新问题', maxHistoryMessages: 4 })
+    // system + last 4 history + new user = 6
+    expect(msgs).toHaveLength(6)
+    expect(msgs[0].role).toBe('system')
+    expect(msgs.slice(1, 5).map(m => m.content)).toEqual(['m26', 'm27', 'm28', 'm29'])
+    expect(msgs.at(-1)).toEqual({ role: 'user', content: '新问题' })
+  })
+
+  it('keeps all history when under the default cap', () => {
+    const history = [
+      { role: 'user' as const, content: 'a' },
+      { role: 'assistant' as const, content: 'b' },
+    ]
+    const msgs = buildMessages({ paper, paperText: 'x', history, userInput: 'q' })
+    expect(msgs.map(m => m.content)).toEqual([msgs[0].content, 'a', 'b', 'q'])
+    expect(msgs).toHaveLength(4)
+  })
 })
