@@ -1,6 +1,6 @@
 # PaperLens 手动冒烟清单
 
-> 自动化测试（`npm test`，35 项）覆盖所有服务逻辑与 UI 交互；生产构建（`npm run build`）已验证可打包。以下为需要真实凭证、必须人工执行的端到端验证。
+> 自动化测试（`npm test`，40 项）覆盖所有服务逻辑与 UI 交互（含 SSE 流式解析、PDF 标签）；`npm run build` 验证可打包，`npm run dist` 已实测产出 macOS dmg。以下为需要真实凭证、必须人工执行的端到端验证。
 
 ## 前置：准备凭证
 启动后点击左上角「⚙ 设置」，填入：
@@ -18,11 +18,20 @@ npm run dev      # 开发模式启动
 
 ## 步骤
 1. [ ] 左栏出现 Zotero 论文列表（失败时显示「加载失败，请检查 Zotero 配置」→ 核对 User ID / API Key）。
-2. [ ] 点击一篇论文，中栏显示标题 / 作者 / 年份 / 摘要。
-3. [ ] 右栏输入问题 → 收到 DeepSeek 回答。首次会拉取并缓存该论文 PDF 全文（稍慢）；纯扫描版 PDF 无文本时 AI 仅依据元数据作答。
-4. [ ] 点「存为笔记」→ 中栏「学习笔记」出现该笔记。
-5. [ ] 点笔记的「同步到 Notion」→ Notion 数据库新增一行：Title=论文名、Authors、Year、Tags，正文段落=笔记内容；按钮变为「✓ 已同步 Notion」。
-6. [ ] 再次对同一篇论文的同一笔记同步 → 为更新（PATCH）而非重复新建（注：当前每次「存为笔记」会新建一条本地笔记，已同步的笔记再点同步走 PATCH，仅更新 properties）。
+2. [ ] 点击一篇论文，中栏「摘要」标签显示标题 / 作者 / 年份 / 摘要 / 学习笔记。
+3. [ ] 切到中栏「全文 PDF」标签 → 下载并逐页渲染该论文 PDF（无 PDF 附件时提示）。
+4. [ ] 右栏输入问题 → DeepSeek 回答以**流式逐字**显示。首次会拉取并缓存该论文 PDF 全文（稍慢）；纯扫描版 PDF 无文本时 AI 仅依据元数据作答。
+5. [ ] 点「存为笔记」→ 切到「摘要」标签，「学习笔记」出现该笔记。
+6. [ ] 点笔记的「同步到 Notion」→ Notion 数据库新增一行：Title=论文名、Authors、Year、Tags，正文段落=笔记内容；按钮变为「✓ 已同步 Notion」。
+7. [ ] 再次对同一篇论文的同一笔记同步 → 为更新（PATCH）而非重复新建（注：当前每次「存为笔记」会新建一条本地笔记，已同步的笔记再点同步走 PATCH，仅更新 properties）。
+
+## 打包成安装包
+```bash
+npm run dist     # electron-vite build + electron-builder → release/
+```
+产物在 `release/`：macOS `PaperLens-<ver>-arm64.dmg`、Windows nsis、Linux AppImage（按当前平台）。mac 为未签名本地构建（`identity: null`）。
+
+> ⚠️ **原生模块 ABI 注意**：`npm run dist` 会把 `better-sqlite3` 原生模块重建为 **Electron 的 ABI**，与 `npm test` 所用的系统 Node ABI 不同。因此**跑过 `dist` 之后若要再跑 `npm test`，先执行 `npm rebuild better-sqlite3`** 还原系统 Node 的二进制，否则 db/notes 相关测试会报 `NODE_MODULE_VERSION` 不匹配。（全新 clone 后 `npm install` 默认即为系统 Node ABI，不受影响。）
 
 ## 排错
 - 任一外部调用失败会作为 IPC rejection 冒泡（控制台可见报错）。主进程错误看终端；渲染层错误看 DevTools（开发模式下可手动打开，菜单或快捷键）。
