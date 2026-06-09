@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Note, Paper } from '@shared/types'
 
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function ReaderView({ paper }: { paper: Paper | null }) {
   const [notes, setNotes] = useState<Note[]>([])
@@ -9,10 +10,12 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
   const [tab, setTab] = useState<'summary' | 'pdf'>('summary')
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setTab('summary')
     setPdfData(null)
+    setError(null)
     if (paper) window.api.listNotes(paper.key).then(setNotes)
     else setNotes([])
   }, [paper?.key])
@@ -20,18 +23,26 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
   if (!paper) return <div style={{ padding: 12, color: '#888' }}>从左侧选择论文</div>
 
   async function sync(noteId: string) {
+    setError(null)
     setSyncing(noteId)
     try {
       await window.api.syncNote({ noteId, paper: paper! })
       setNotes(await window.api.listNotes(paper!.key))
+    } catch (e) {
+      setError('同步到 Notion 失败：' + errMsg(e))
     } finally { setSyncing(null) }
   }
 
   async function openPdf() {
     setTab('pdf')
     if (pdfData === null && !pdfLoading) {
+      setError(null)
       setPdfLoading(true)
-      try { setPdfData(await window.api.getPaperPdf(paper!)) } finally { setPdfLoading(false) }
+      try {
+        setPdfData(await window.api.getPaperPdf(paper!))
+      } catch (e) {
+        setError('PDF 加载失败：' + errMsg(e))
+      } finally { setPdfLoading(false) }
     }
   }
 
@@ -41,6 +52,7 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
         <button onClick={() => setTab('summary')} disabled={tab === 'summary'}>摘要</button>
         <button onClick={openPdf} disabled={tab === 'pdf'}>全文 PDF</button>
       </div>
+      {error && <div role="alert" style={{ color: 'crimson', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {tab === 'summary' ? (
         <div style={{ overflow: 'auto' }}>
           <h2>{paper.title}</h2>

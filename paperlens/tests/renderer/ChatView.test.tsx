@@ -46,4 +46,15 @@ describe('ChatView', () => {
       expect.objectContaining({ paperKey: 'P1', content: '可保存的学习要点' })
     ))
   })
+
+  it('shows an error banner when streaming fails', async () => {
+    ;(window as any).api = {
+      getPaperText: vi.fn(async () => 'x'),
+      streamChat: vi.fn(async () => { throw new Error('DeepSeek 401') }),
+    }
+    render(<ChatView paper={paper} />)
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/失败/))
+  })
 })

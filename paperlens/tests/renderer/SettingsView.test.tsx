@@ -18,4 +18,16 @@ describe('SettingsView', () => {
       expect.objectContaining({ zoteroUserId: '42', zoteroApiKey: 'zk' })
     ))
   })
+
+  it('shows an error and stays open when saving fails', async () => {
+    const onClose = vi.fn()
+    ;(window as any).api = {
+      getConfig: vi.fn(async () => empty),
+      setConfig: vi.fn(async () => { throw new Error('disk full') }),
+    }
+    render(<SettingsView onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: /保存/ }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/失败/))
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })
