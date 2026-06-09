@@ -54,4 +54,25 @@ describe('createAiChat.stream', () => {
     const chat = createAiChat({ apiKey: 'k', model: 'deepseek-chat', fetch })
     await expect(chat.stream([{ role: 'user', content: 'q' }], () => {})).rejects.toThrow(/DeepSeek.*500/)
   })
+
+  it('decodes a multibyte UTF-8 char split across two reads (stream flag)', async () => {
+    const line = 'data: {"choices":[{"delta":{"content":"片段"}}]}\n\ndata: [DONE]\n\n'
+    const bytes = new TextEncoder().encode(line)
+    const cut = bytes.indexOf(0xe7) + 1 // split inside the first byte of '片' (E7 89 87)
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes.slice(0, cut))
+          controller.enqueue(bytes.slice(cut))
+          controller.close()
+        },
+      })
+      return new Response(stream, { status: 200 })
+    })
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-chat', fetch })
+    const tokens: string[] = []
+    const full = await chat.stream([{ role: 'user', content: 'q' }], d => tokens.push(d))
+    expect(full).toBe('片段')
+    expect(tokens).toEqual(['片段'])
+  })
 })
