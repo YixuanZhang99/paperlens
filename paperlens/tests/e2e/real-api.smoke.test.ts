@@ -33,10 +33,11 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
         log(`Zotero: listed ${papers.length} papers`)
         log('Zotero: first 3 →', papers.slice(0, 3).map(p => `"${short(p.title, 50)}" (${p.year ?? '?'})`))
 
-        // Diagnose attachments: imported vs linked, and how many actually have a cloud file.
-        const imported: { paper: typeof papers[number]; key: string }[] = []
-        let pdfCount = 0, importedCount = 0, linkedCount = 0
-        for (const p of papers.slice(0, 12)) {
+        // Diagnose attachments across ALL papers: linkMode + md5/mtime (md5 present ⇒
+        // file metadata registered for sync; if /file still 404s ⇒ likely WebDAV, not Zotero storage).
+        const imported: { paper: typeof papers[number]; key: string; md5: string | null }[] = []
+        let pdfCount = 0, importedCount = 0, linkedCount = 0, withMd5 = 0
+        for (const p of papers) {
           const res = await fetch(`${base}/users/${E.ZOTERO_USER_ID}/items/${p.key}/children`, { headers })
           if (!res.ok) continue
           const children = (await res.json()) as any[]
@@ -44,17 +45,21 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
             const d = c.data ?? {}
             if (d.itemType === 'attachment' && d.contentType === 'application/pdf') {
               pdfCount++
-              if (d.linkMode === 'imported_file' || d.linkMode === 'imported_url') { importedCount++; imported.push({ paper: p, key: d.key }) }
-              else linkedCount++
+              if (d.linkMode === 'imported_file' || d.linkMode === 'imported_url') {
+                importedCount++
+                if (d.md5) withMd5++
+                imported.push({ paper: p, key: d.key, md5: d.md5 ?? null })
+              } else linkedCount++
             }
           }
         }
-        log(`Zotero attachments (first 12 papers): ${pdfCount} PDF(s) → ${importedCount} imported, ${linkedCount} linked`)
+        log(`Zotero attachments (ALL ${papers.length} papers): ${pdfCount} PDF(s) → ${importedCount} imported, ${linkedCount} linked; of imported ${withMd5} have md5(synced metadata), ${importedCount - withMd5} have NO md5(never uploaded)`)
+        log(`Zotero sample md5/mtime → ` + imported.slice(0, 4).map(it => `${it.key}:md5=${it.md5 ? it.md5.slice(0, 8) : 'NULL'}`).join(', '))
 
-        // Try to actually fetch the bytes for up to 5 imported PDFs — distinguishes
-        // "imported but not uploaded to Zotero cloud (404)" from "downloadable".
+        // Try downloading several — prefer ones that DO have md5.
+        const ordered = [...imported].sort((a, b) => (b.md5 ? 1 : 0) - (a.md5 ? 1 : 0))
         let downloaded = 0, notFound = 0
-        for (const it of imported.slice(0, 5)) {
+        for (const it of ordered.slice(0, 8)) {
           try {
             const buf = await zotero.downloadAttachment(it.key)
             const u8 = new Uint8Array(buf)
@@ -71,9 +76,12 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
             else log(`Zotero download error → ${(e as Error).message}`)
           }
         }
-        log(`Zotero file download (up to 5 imported): ${downloaded} ok, ${notFound} 404 (no cloud file)`)
+        log(`Zotero file download (up to 8): ${downloaded} ok, ${notFound} 404`)
         if (downloaded === 0 && notFound > 0) {
-          log('Zotero FINDING: imported PDFs exist but their FILES are NOT on Zotero cloud storage (every /file → 404). The Zotero *Web API* can only fetch files that were uploaded via Zotero file-sync. → Enable Zotero file syncing (Settings → Sync → "Sync attachment files"), OR switch this app to a local-Zotero-storage integration. In-app PDF reading + AI full-text need the file; chat still works on metadata.')
+          if (withMd5 > 0)
+            log('Zotero FINDING: attachments HAVE md5 (registered for sync) but /file still 404s → files are NOT on Zotero CLOUD storage. This is the signature of **WebDAV file sync** (bytes live on your WebDAV server, not Zotero) — the Zotero *Web API* cannot fetch them. Options: switch Zotero to "Zotero" storage (Settings→Sync→File Syncing→"Sync attachment files using Zotero"), or add a local-Zotero-storage integration to this app.')
+          else
+            log('Zotero FINDING: imported attachments have NO md5 → files were never uploaded to Zotero storage (sync still running, OR file syncing not actually enabled / quota exceeded). Re-check after sync completes; verify Settings→Sync→File Syncing uses "Zotero" (not "WebDAV"/off).')
         }
       } catch (e) {
         log('Zotero ERROR →', (e as Error).message)
