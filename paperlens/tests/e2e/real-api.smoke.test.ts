@@ -7,6 +7,7 @@ import { createZoteroClient } from '../../src/main/services/zotero-client'
 import { createAiChat, buildMessages } from '../../src/main/services/ai-chat'
 import { extractPdfText } from '../../src/main/services/pdf-service'
 import { createZoteroLocal } from '../../src/main/services/zotero-local'
+import { createNotionSync } from '../../src/main/services/notion-sync'
 import fs from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
@@ -172,6 +173,23 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
           log(`Notion DB schema check → ${missing.length === 0 ? 'OK (matches required columns)' : 'MISSING ' + missing.join(', ')}`)
         }
         if (dbs.length === 0) log('Notion: token valid but NO database is shared with the integration (connect one in the DB ••• → Connections).')
+
+        // --- REAL WRITE via the production createNotionSync (only when a DB id is given) ---
+        if (E.NOTION_DATABASE_ID) {
+          const sync = createNotionSync({ token: E.NOTION_TOKEN!, databaseId: E.NOTION_DATABASE_ID, fetch })
+          const paper = { key: 'P', title: paperTitle, authors: ['Mo, Kaixiang', 'Shi, Yuxin'], year: 2025, abstract: '', attachmentKey: null }
+          const note = {
+            id: 'e2e-1', paperKey: 'P', notionPageId: null, createdAt: 1700000000000,
+            tags: ['e2e', 'paperlens'],
+            content: '[PaperLens E2E 测试页 — 可删除] 本笔记由端到端验证写入，验证 Notion 结构化同步（Title/Authors/Year/Tags + 正文）。',
+          }
+          const pageId = await sync.sync(note, paper)
+          log(`Notion WRITE: ✓ created page → ${pageId}`)
+          const pageId2 = await sync.sync({ ...note, notionPageId: pageId }, paper)
+          log(`Notion WRITE: ✓ re-sync (PATCH update) → ${pageId2}; same page = ${pageId === pageId2}`)
+          expect(pageId2).toBe(pageId)
+          notionOk = true
+        }
       } catch (e) {
         log('Notion ERROR →', (e as Error).message)
       }
