@@ -59,6 +59,28 @@ describe('zotero-client.findPdfAttachment', () => {
   })
 })
 
+describe('zotero-client.findPdfAttachmentInfo', () => {
+  it('returns the first PDF child key + filename', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify([
+        { key: 'C1', data: { key: 'C1', itemType: 'attachment', contentType: 'text/html', filename: 'x.html' } },
+        { key: 'C2', data: { key: 'C2', itemType: 'attachment', contentType: 'application/pdf', filename: 'Paper 2024.pdf' } },
+      ]), { status: 200 })
+    )
+    const client = createZoteroClient({ apiKey: 'k', userId: '1', fetch })
+    const info = await client.findPdfAttachmentInfo('PARENT')
+    expect(fetch.mock.calls[0]![0]).toContain('/items/PARENT/children')
+    expect(info).toEqual({ key: 'C2', filename: 'Paper 2024.pdf' })
+  })
+
+  it('returns null when no pdf child exists', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify([]), { status: 200 }))
+    const client = createZoteroClient({ apiKey: 'k', userId: '1', fetch })
+    expect(await client.findPdfAttachmentInfo('PARENT')).toBeNull()
+  })
+})
+
 describe('zotero-client.downloadAttachment', () => {
   it('fetches the file endpoint and returns bytes', async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]) // %PDF
