@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Paper } from '@shared/types'
 import { LibraryView } from './components/LibraryView'
 import { ReaderView } from './components/ReaderView'
@@ -8,6 +8,14 @@ import { SettingsView } from './components/SettingsView'
 export function App() {
   const [selected, setSelected] = useState<Paper | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+
+  useEffect(() => {
+    if (!showSettings) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowSettings(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [showSettings])
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 420px', height: '100vh' }}>
       <nav aria-label="论文库" style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid #ddd', overflow: 'hidden' }}>
@@ -25,8 +33,17 @@ export function App() {
         <ChatView paper={selected} />
       </section>
       {showSettings && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 8, maxHeight: '90vh', overflow: 'auto' }}>
+        <div
+          onClick={() => setShowSettings(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 8, maxHeight: '90vh', overflow: 'auto' }}
+          >
             <SettingsView onClose={() => setShowSettings(false)} />
           </div>
         </div>
