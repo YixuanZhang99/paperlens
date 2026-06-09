@@ -11,8 +11,14 @@ function toArrayBuffer(u: Uint8Array): ArrayBuffer {
 // PDF bytes: local Zotero storage first (works for WebDAV/local libraries),
 // then the Zotero Web API /file (works only for Zotero-cloud-stored files).
 async function readPdfBytes(c: Container, info: { key: string; filename: string }): Promise<Uint8Array | null> {
-  const local = c.zoteroLocal().readPdf(info.key, info.filename)
-  if (local) return local
+  // 1) local Zotero storage (works for WebDAV/local libraries)
+  try {
+    const local = c.zoteroLocal().readPdf(info.key, info.filename)
+    if (local) return local
+  } catch {
+    // local read failed (fs error / race) — fall through to the Web API
+  }
+  // 2) Zotero Web API /file (works only for Zotero-cloud-stored files)
   try {
     return new Uint8Array(await c.zotero().downloadAttachment(info.key))
   } catch {
