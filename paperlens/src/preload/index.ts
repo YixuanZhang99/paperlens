@@ -6,6 +6,7 @@ const api = {
   setConfig: (p: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke('config:set', p),
   listPapers: (): Promise<Paper[]> => ipcRenderer.invoke('zotero:list'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),
+  getPaperPdf: (paper: Paper): Promise<ArrayBuffer | null> => ipcRenderer.invoke('paper:pdfBytes', paper),
   sendChat: (a: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }): Promise<string> =>
     ipcRenderer.invoke('chat:send', a),
   addNote: (n: { paperKey: string; content: string; tags: string[] }): Promise<Note> =>

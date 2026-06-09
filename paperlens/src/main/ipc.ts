@@ -26,6 +26,14 @@ export function registerIpc(c: Container) {
     return text
   })
 
+  // 返回论文 PDF 原始字节（不缓存——按需获取用于前端渲染）
+  ipcMain.handle('paper:pdfBytes', async (_e, paper: Paper): Promise<ArrayBuffer | null> => {
+    const z = c.zotero()
+    const attKey = paper.attachmentKey ?? (await z.findPdfAttachment(paper.key))
+    if (!attKey) return null
+    return z.downloadAttachment(attKey)
+  })
+
   ipcMain.handle('chat:send', async (_e, args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }) => {
     const messages = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
     return c.ai().complete(messages)
