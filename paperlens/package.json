@@ -2,15 +2,27 @@
   "name": "paperlens",
   "version": "0.1.0",
   "description": "论文阅读与学习助手",
+  "author": "PaperLens",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
+  },
+  "build": {
+    "appId": "com.paperlens.app",
+    "productName": "PaperLens",
+    "directories": { "output": "release" },
+    "files": ["out/**/*", "package.json"],
+    "asarUnpack": ["**/node_modules/better-sqlite3/**"],
+    "mac": { "target": ["dmg"], "category": "public.app-category.education", "identity": null },
+    "win": { "target": ["nsis"] },
+    "linux": { "target": ["AppImage"], "category": "Education" }
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
@@ -25,6 +37,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^32.1.0",
+    "electron-builder": "^26.15.2",
     "electron-vite": "^2.3.0",
     "jsdom": "^25.0.0",
     "react": "^18.3.1",
