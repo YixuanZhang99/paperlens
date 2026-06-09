@@ -6,6 +6,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const FIELDS: Array<{ key: keyof AppConfig; label: string; secret?: boolean }> = [
   { key: 'zoteroUserId', label: 'Zotero User ID' },
   { key: 'zoteroApiKey', label: 'Zotero API Key', secret: true },
+  { key: 'zoteroDataDir', label: 'Zotero 数据目录（留空=默认 ~/Zotero）' },
   { key: 'deepseekApiKey', label: 'DeepSeek API Key', secret: true },
   { key: 'deepseekModel', label: 'DeepSeek Model' },
   { key: 'notionToken', label: 'Notion Token', secret: true },
@@ -27,7 +28,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
           <span>{f.label}</span>
           <input
             type={f.secret ? 'password' : 'text'}
-            value={cfg[f.key]}
+            value={cfg[f.key] ?? ''}
             onChange={e => setCfg({ ...cfg, [f.key]: e.target.value })} />
         </label>
       ))}

@@ -29,6 +29,7 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>
 export const AppConfigSchema = z.object({
   zoteroApiKey: z.string().default(''),
   zoteroUserId: z.string().default(''),
+  zoteroDataDir: z.string().default(''),
   deepseekApiKey: z.string().default(''),
   deepseekModel: z.string().default('deepseek-chat'),
   notionToken: z.string().default(''),

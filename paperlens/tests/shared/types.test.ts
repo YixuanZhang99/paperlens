@@ -32,6 +32,11 @@ describe('shared schemas', () => {
     expect(c.deepseekModel).toBe('deepseek-chat')
   })
 
+  it('defaults zoteroDataDir to empty string', () => {
+    const c = AppConfigSchema.parse({})
+    expect(c.zoteroDataDir).toBe('')
+  })
+
   it('parses a valid chat message', () => {
     const m = ChatMessageSchema.parse({ role: 'user', content: 'hi' })
     expect(m.role).toBe('user')
