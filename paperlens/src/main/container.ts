@@ -50,7 +50,7 @@ export function createContainer() {
   const zoteroLocal = () => createZoteroLocal({
     dataDir: cfg().zoteroDataDir || join(os.homedir(), 'Zotero'),
     exists: (p) => fs.existsSync(p),
-    readFile: (p) => fs.readFileSync(p),
+    readFile: (p) => new Uint8Array(fs.readFileSync(p)),
     readdir: (p) => fs.readdirSync(p),
     join: (...parts) => join(...parts),
   })
