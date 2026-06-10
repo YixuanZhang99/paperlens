@@ -9,21 +9,21 @@ const paper: Paper = {
 
 describe('buildMessages', () => {
   it('puts a system prompt with paper metadata + truncated full text first', () => {
-    const msgs = buildMessages({
+    const { messages: msgs } = buildMessages({
       paper, paperText: 'X'.repeat(1000), history: [], userInput: '这篇论文讲了什么？',
       maxContextChars: 100,
     })
     expect(msgs[0].role).toBe('system')
     expect(msgs[0].content).toContain('Transformer')
     expect(msgs[0].content).toContain('Vaswani')
-    // 全文被截断到 maxContextChars
-    expect(msgs[0].content).toContain('X'.repeat(100))
-    expect(msgs[0].content).not.toContain('X'.repeat(101))
+    // 截断为头 70 + 尾 30，中间以省略标记相连
+    expect(msgs[0].content).toContain('X'.repeat(70) + '\n\n…（中间略）…\n\n' + 'X'.repeat(30))
+    expect(msgs[0].content).not.toContain('X'.repeat(71))
     expect(msgs.at(-1)).toEqual({ role: 'user', content: '这篇论文讲了什么？' })
   })
 
   it('keeps prior conversation history between system and new input', () => {
-    const msgs = buildMessages({
+    const { messages: msgs } = buildMessages({
       paper, paperText: 'abc',
       history: [{ role: 'user', content: '第一问' }, { role: 'assistant', content: '第一答' }],
       userInput: '第二问', maxContextChars: 1000,
@@ -36,7 +36,7 @@ describe('buildMessages', () => {
       role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
       content: `m${i}`,
     }))
-    const msgs = buildMessages({ paper, paperText: 'x', history, userInput: '新问题', maxHistoryMessages: 4 })
+    const { messages: msgs } = buildMessages({ paper, paperText: 'x', history, userInput: '新问题', maxHistoryMessages: 4 })
     // system + last 4 history + new user = 6
     expect(msgs).toHaveLength(6)
     expect(msgs[0].role).toBe('system')
@@ -49,7 +49,7 @@ describe('buildMessages', () => {
       { role: 'user' as const, content: 'a' },
       { role: 'assistant' as const, content: 'b' },
     ]
-    const msgs = buildMessages({ paper, paperText: 'x', history, userInput: 'q' })
+    const { messages: msgs } = buildMessages({ paper, paperText: 'x', history, userInput: 'q' })
     expect(msgs.map(m => m.content)).toEqual([msgs[0].content, 'a', 'b', 'q'])
     expect(msgs).toHaveLength(4)
   })

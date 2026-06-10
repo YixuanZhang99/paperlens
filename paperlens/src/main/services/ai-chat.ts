@@ -9,19 +9,41 @@ export interface BuildMessagesInput {
   maxHistoryMessages?: number
 }
 
-export function buildMessages(input: BuildMessagesInput): ChatMessage[] {
-  const max = input.maxContextChars ?? 60_000
+export interface BuiltContext {
+  messages: ChatMessage[]
+  usedChars: number
+  totalChars: number
+  truncated: boolean
+}
+
+export function buildMessages(input: BuildMessagesInput): BuiltContext {
+  const max = input.maxContextChars ?? 240_000
   const maxHistory = input.maxHistoryMessages ?? 20
-  const text = input.paperText.slice(0, max)
+  const totalChars = input.paperText.length
+  const truncated = totalChars > max
+  let text: string
+  let usedChars: number
+  if (truncated) {
+    // 头尾保留：前 70% 上限 + 省略标记 + 后 30% 上限，让结论/局限等尾部内容不被丢弃
+    const headLen = Math.floor(max * 0.7)
+    const tailLen = max - headLen
+    text = input.paperText.slice(0, headLen) + '\n\n…（中间略）…\n\n' + input.paperText.slice(totalChars - tailLen)
+    usedChars = max
+  } else {
+    text = input.paperText
+    usedChars = totalChars
+  }
   const recentHistory = input.history.slice(-maxHistory)
   const meta = `标题：${input.paper.title}\n作者：${input.paper.authors.join(', ')}\n年份：${input.paper.year ?? '未知'}`
+  const contextNote = truncated ? '正文已截断，仅含首尾部分' : '已含全文'
   const system: ChatMessage = {
     role: 'system',
     content:
       `你是一个严谨的论文学习助手。基于以下论文与用户对话，帮助用户深入理解。` +
-      `只依据论文内容作答，不确定时明确说明。\n\n【论文元数据】\n${meta}\n\n【论文正文（可能截断）】\n${text}`,
+      `只依据论文内容作答，不确定时明确说明。\n\n【论文元数据】\n${meta}\n\n【论文正文（${contextNote}）】\n${text}`,
   }
-  return [system, ...recentHistory, { role: 'user', content: input.userInput }]
+  const messages: ChatMessage[] = [system, ...recentHistory, { role: 'user', content: input.userInput }]
+  return { messages, usedChars, totalChars, truncated }
 }
 
 export type StreamTokenKind = 'content' | 'reasoning'
@@ -47,12 +69,26 @@ export function createAiChat(deps: AiChatDeps) {
     return data.choices[0]?.message?.content ?? ''
   }
 
-  async function stream(messages: ChatMessage[], onToken: (delta: string, kind: StreamTokenKind) => void): Promise<string> {
-    const res = await deps.fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
-      body: JSON.stringify({ model: deps.model, messages, stream: true }),
-    })
+  const isAbortError = (err: unknown): boolean =>
+    err instanceof Error && err.name === 'AbortError'
+
+  async function stream(
+    messages: ChatMessage[],
+    onToken: (delta: string, kind: StreamTokenKind) => void,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    let res: Response
+    try {
+      res = await deps.fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
+        body: JSON.stringify({ model: deps.model, messages, stream: true }),
+        signal,
+      })
+    } catch (err) {
+      if (isAbortError(err)) return '' // aborted before any token arrived
+      throw err
+    }
     if (!res.ok) throw new Error(`DeepSeek stream failed: ${res.status}`)
     if (!res.body) throw new Error('DeepSeek stream: empty body')
     const reader = res.body.getReader()
@@ -60,7 +96,15 @@ export function createAiChat(deps: AiChatDeps) {
     let buffer = ''
     let full = ''
     for (;;) {
-      const { done, value } = await reader.read()
+      let done: boolean
+      let value: Uint8Array | undefined
+      try {
+        ;({ done, value } = await reader.read())
+      } catch (err) {
+        // user-initiated stop: return what we have accumulated so far
+        if (isAbortError(err)) break
+        throw err
+      }
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
@@ -114,6 +158,34 @@ export function buildTagMessages(content: string): ChatMessage[] {
     },
     { role: 'user', content: content.slice(0, 4_000) },
   ]
+}
+
+export function buildFollowupMessages(paperTitle: string, lastAnswer: string): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        `你是一个论文学习助手。论文标题：${paperTitle}。` +
+        `请基于刚才的回答，生成 3 个用户可能想继续问的简短追问（每个不超过 20 字），` +
+        `只输出一个 JSON 字符串数组，例如 ["实验如何设计？","有哪些局限？","结论是什么？"]，不要任何其他文字。`,
+    },
+    { role: 'user', content: lastAnswer.slice(0, 2_000) },
+  ]
+}
+
+export function parseFollowups(text: string): string[] {
+  const m = text.match(/\[[\s\S]*?\]/)
+  if (!m) return []
+  try {
+    const arr = JSON.parse(m[0]) as unknown
+    if (!Array.isArray(arr)) return []
+    return arr
+      .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+      .map(q => q.trim())
+      .slice(0, 3)
+  } catch {
+    return []
+  }
 }
 
 export function parseTags(text: string): string[] {
