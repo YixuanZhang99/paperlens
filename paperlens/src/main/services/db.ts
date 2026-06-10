@@ -36,5 +36,15 @@ export function migrate(db: DatabaseType.Database): void {
     CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
       INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
     END;
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY,
+      paper_key TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      reasoning TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_paper ON chat_messages(paper_key, id);
   `)
 }
