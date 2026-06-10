@@ -29,11 +29,16 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
   const paperText = useRef('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom on history change
+  // 自动滚动到底：history 流式增长、followups 异步出现、busy 切换都要跟随。
+  // rAF 兜底——Markdown 在 commit 后才完成布局，单次设置会停在旧高度。
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [history])
+    if (!el) return
+    const toBottom = () => { el.scrollTop = el.scrollHeight }
+    toBottom()
+    const raf = requestAnimationFrame(toBottom)
+    return () => cancelAnimationFrame(raf)
+  }, [history, followups, busy])
 
   useEffect(() => {
     setHistory([])
