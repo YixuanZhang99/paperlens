@@ -10,10 +10,10 @@ const api = {
   sendChat: (a: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }): Promise<string> =>
     ipcRenderer.invoke('chat:send', a),
   streamChat: (
-    args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string },
-    onToken: (delta: string) => void,
+    args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string; deepThink?: boolean },
+    onToken: (delta: string, kind: 'content' | 'reasoning') => void,
   ): Promise<string> => {
-    const listener = (_e: Electron.IpcRendererEvent, delta: string) => onToken(delta)
+    const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
     ipcRenderer.on('chat:token', listener)
     return ipcRenderer.invoke('chat:stream', args).finally(() => {
       ipcRenderer.removeListener('chat:token', listener)
