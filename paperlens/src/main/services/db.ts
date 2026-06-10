@@ -17,5 +17,24 @@ export function migrate(db: DatabaseType.Database): void {
       text TEXT NOT NULL,
       cached_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chunks (
+      id INTEGER PRIMARY KEY,
+      paper_key TEXT NOT NULL,
+      paper_title TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      text TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunks_paper ON chunks(paper_key);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      text, content='chunks', content_rowid='id', tokenize='trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+      INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+      INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+    END;
   `)
 }
