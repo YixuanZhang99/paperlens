@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatMessage, Paper } from '@shared/types'
+import { Markdown } from './Markdown'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -87,9 +88,13 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
             {m.reasoning && (
               <div className="reasoning-block">{m.reasoning}</div>
             )}
-            <span className={'bubble ' + (m.role === 'user' ? 'user' : 'assistant')}>
-              {m.content || (busy && m.role === 'assistant' ? '…' : '')}
-            </span>
+            {m.role === 'assistant' ? (
+              <div className="bubble assistant">
+                {m.content ? <Markdown>{m.content}</Markdown> : (busy ? '…' : '')}
+              </div>
+            ) : (
+              <span className="bubble user">{m.content}</span>
+            )}
           </div>
         ))}
       </div>

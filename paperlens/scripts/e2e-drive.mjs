@@ -116,7 +116,7 @@ app.whenReady().then(async () => {
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '核心贡献').click(); return true`)
   await waitFor('chat reply', `
     const send = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '发送')
-    const bubbles = document.querySelectorAll('section[aria-label="对话"] span')
+    const bubbles = document.querySelectorAll('section[aria-label="对话"] .bubble')
     const last = bubbles[bubbles.length - 1]
     return (send && !send.disabled && last && last.textContent.length > 20) ? true : false`, 120000, 1000)
   await shot('06-chat.png'); ok('quick-prompt-chat')

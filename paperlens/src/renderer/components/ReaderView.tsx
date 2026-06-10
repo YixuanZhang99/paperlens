@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Note, Paper } from '@shared/types'
+import { Markdown } from './Markdown'
 
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -84,13 +85,13 @@ export function ReaderView({ paper, notesVersion = 0 }: { paper: Paper | null; n
             <button className="btn-accent-soft" onClick={deepRead} disabled={deepReading}>✨ AI 精读</button>
           </div>
           <div className="deepread-preview" style={{ display: deepReading || deepReadPreview ? 'block' : 'none' }}>
-            {deepReadPreview || (deepReading ? '正在精读…' : '')}
+            {deepReadPreview ? <Markdown>{deepReadPreview}</Markdown> : (deepReading ? '正在精读…' : '')}
           </div>
           {notes.length === 0 && <p className="empty-hint">暂无笔记，点「✨ AI 精读」一键生成，或去右侧与 AI 对话并「存为笔记」。</p>}
           <ul className="note-list">
             {notes.map(n => (
               <li key={n.id} className="note-card">
-                <div>{n.content}</div>
+                <div><Markdown>{n.content}</Markdown></div>
                 {n.tags.length > 0 && (
                   <div className="note-tags">
                     {n.tags.map(t => (

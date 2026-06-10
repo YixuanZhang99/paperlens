@@ -245,6 +245,43 @@ input::placeholder { color: var(--text-3); }
 }
 .deepthink-label input { accent-color: var(--accent); cursor: pointer; }
 
+/* ─── Markdown 渲染（AI 输出）────────────────────────────────── */
+.md { white-space: normal; font-size: 13.5px; line-height: 1.65; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 6px 0; }
+.md h1, .md h2, .md h3, .md h4 {
+  margin: 14px 0 6px; line-height: 1.4; font-weight: 650; letter-spacing: -.1px;
+}
+.md h1 { font-size: 16px; }
+.md h2 { font-size: 15px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.md h3 { font-size: 14px; }
+.md h4 { font-size: 13.5px; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md li > p { margin: 2px 0; }
+.md strong { font-weight: 650; }
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; background: var(--accent-soft); color: var(--accent);
+  border-radius: 4px; padding: 1px 5px;
+}
+.md pre {
+  background: #1f2328; color: #e6edf3; border-radius: var(--radius-sm);
+  padding: 10px 12px; overflow: auto; margin: 8px 0;
+}
+.md pre code { background: transparent; color: inherit; padding: 0; font-size: 12px; }
+.md blockquote {
+  margin: 8px 0; padding: 4px 12px; color: var(--text-2);
+  border-left: 3px solid var(--accent-border); background: var(--surface-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.md table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; }
+.md th, .md td { border: 1px solid var(--border-strong); padding: 4px 10px; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md a { color: var(--accent); }
+
 /* ─── 错误横幅 ────────────────────────────────────────────────── */
 .alert-banner {
   color: var(--red); background: var(--red-soft);

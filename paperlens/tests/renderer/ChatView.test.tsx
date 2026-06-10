@@ -27,6 +27,19 @@ describe('ChatView', () => {
     )
   })
 
+  it('renders assistant markdown (headings/bold), not raw marker text', async () => {
+    const streamChat = vi.fn(async (_a: any, onToken: any) => {
+      onToken('## 重点\n\n这是**加粗**结论', 'content'); return '## 重点\n\n这是**加粗**结论'
+    })
+    ;(window as any).api = { getPaperText: vi.fn(async () => 'x'), streamChat }
+    render(<ChatView paper={paper} />)
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    expect(await screen.findByRole('heading', { name: '重点' })).toBeInTheDocument()
+    expect(screen.getByText('加粗')).toBeInTheDocument()
+    expect(screen.queryByText(/## 重点/)).not.toBeInTheDocument()
+  })
+
   it('saves the last assistant reply as a note', async () => {
     const addNote = vi.fn(async () => ({}))
     const onNoteSaved = vi.fn()

@@ -20,16 +20,40 @@
   "build": {
     "appId": "com.paperlens.app",
     "productName": "PaperLens",
-    "directories": { "output": "release" },
-    "files": ["out/**/*", "package.json"],
-    "asarUnpack": ["**/node_modules/better-sqlite3/**"],
-    "mac": { "target": ["dmg"], "category": "public.app-category.education", "identity": null },
-    "win": { "target": ["nsis"] },
-    "linux": { "target": ["AppImage"], "category": "Education" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.education",
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Education"
+    }
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
     "pdfjs-dist": "^4.6.82",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

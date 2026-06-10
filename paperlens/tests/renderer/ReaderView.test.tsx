@@ -58,9 +58,11 @@ describe('ReaderView', () => {
     ;(window as any).api = { listNotes, deepReadPaper }
     render(<ReaderView paper={paper} />)
     fireEvent.click(screen.getByRole('button', { name: /AI 精读/ }))
-    expect(await screen.findByText('## 背景问题…')).toBeInTheDocument()
     expect(deepReadPaper).toHaveBeenCalledWith(paper, expect.any(Function))
     await waitFor(() => expect(listNotes).toHaveBeenCalledTimes(2)) // 挂载 1 次 + 完成后刷新 1 次
+    // markdown 渲染：笔记中的 '## 背景问题…' 应呈现为标题而非生文本（刷新后元素稳定）
+    expect(await screen.findByRole('heading', { name: '背景问题…' })).toBeInTheDocument()
+    expect(screen.queryByText(/## 背景问题/)).not.toBeInTheDocument()
   })
 
   it('renders note tags as chips', async () => {
