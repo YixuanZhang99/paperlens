@@ -1,3 +1,4 @@
+import type DatabaseType from 'better-sqlite3'
 import type { ChatMessage } from '@shared/types'
 
 // 论文全文切块：固定窗口 + 重叠，保证检索段落上下文完整
@@ -46,6 +47,72 @@ export function parseQueryTerms(text: string): string[] {
   } catch {
     return []
   }
+}
+
+export interface ChunkHit {
+  id: number
+  paperKey: string
+  paperTitle: string
+  text: string
+}
+
+export function insertChunks(db: DatabaseType.Database, paperKey: string, paperTitle: string, chunks: string[]): void {
+  db.prepare('DELETE FROM chunks WHERE paper_key = ?').run(paperKey)
+  const ins = db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text) VALUES (?,?,?,?)')
+  const all = db.transaction((cs: string[]) => {
+    cs.forEach((c, i) => ins.run(paperKey, paperTitle, i, c))
+  })
+  all(chunks)
+}
+
+export function indexedPaperKeys(db: DatabaseType.Database): Set<string> {
+  const rows = db.prepare('SELECT DISTINCT paper_key AS k FROM chunks').all() as Array<{ k: string }>
+  return new Set(rows.map(r => r.k))
+}
+
+export function kbStatus(db: DatabaseType.Database): { indexedPapers: number; totalChunks: number } {
+  const r = db.prepare('SELECT COUNT(DISTINCT paper_key) AS p, COUNT(*) AS c FROM chunks').get() as { p: number; c: number }
+  return { indexedPapers: r.p, totalChunks: r.c }
+}
+
+// 检索：≥3 字符词走 FTS5 MATCH（bm25 排序），更短词 LIKE 兜底；
+// 合并去重后按「命中词数 desc，bm25 asc」排序取 top-k。
+export function searchChunks(db: DatabaseType.Database, terms: string[], k = 8): ChunkHit[] {
+  type Acc = ChunkHit & { hitCount: number; bestRank: number }
+  const acc = new Map<number, Acc>()
+  const add = (row: { id: number; paper_key: string; paper_title: string; text: string }, rank: number) => {
+    const cur = acc.get(row.id)
+    if (cur) {
+      cur.hitCount += 1
+      cur.bestRank = Math.min(cur.bestRank, rank)
+    } else {
+      acc.set(row.id, {
+        id: row.id, paperKey: row.paper_key, paperTitle: row.paper_title, text: row.text,
+        hitCount: 1, bestRank: rank,
+      })
+    }
+  }
+  for (const term of terms) {
+    const t = term.trim()
+    if (!t) continue
+    if (t.length >= 3) {
+      const rows = db.prepare(
+        `SELECT c.id, c.paper_key, c.paper_title, c.text, bm25(chunks_fts) AS rank
+         FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid
+         WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?`
+      ).all(`"${t.replaceAll('"', '""')}"`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string; rank: number }>
+      rows.forEach(r => add(r, r.rank))
+    } else {
+      const rows = db.prepare(
+        `SELECT id, paper_key, paper_title, text FROM chunks WHERE text LIKE ? LIMIT ?`
+      ).all(`%${t}%`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string }>
+      rows.forEach(r => add(r, 0))
+    }
+  }
+  return [...acc.values()]
+    .sort((a, b) => b.hitCount - a.hitCount || a.bestRank - b.bestRank)
+    .slice(0, k)
+    .map(({ hitCount: _h, bestRank: _r, ...hit }) => hit)
 }
 
 export interface KbHit {
