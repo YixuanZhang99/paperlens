@@ -88,3 +88,45 @@ export function createAiChat(deps: AiChatDeps) {
 
   return { complete, stream }
 }
+
+export function buildDeepReadMessages(paper: Paper, paperText: string, maxContextChars = 60_000): ChatMessage[] {
+  const text = paperText.slice(0, maxContextChars)
+  const meta = `标题：${paper.title}\n作者：${paper.authors.join(', ')}\n年份：${paper.year ?? '未知'}`
+  return [
+    {
+      role: 'system',
+      content:
+        `你是一个严谨的论文精读助手。请基于论文内容输出结构化精读笔记（Markdown），` +
+        `依次包含五节：## 背景问题、## 核心贡献、## 方法、## 实验与结论、## 局限与展望。` +
+        `内容务必忠于原文，不确定处明确说明。\n\n【论文元数据】\n${meta}\n\n【论文正文（可能截断）】\n${text}`,
+    },
+    { role: 'user', content: '请输出这篇论文的结构化精读笔记。' },
+  ]
+}
+
+export function buildTagMessages(content: string): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        '你是一个文献标签助手。请为给定笔记内容生成 2-4 个主题标签（中文或英文术语，每个不超过 12 字），' +
+        '只输出一个 JSON 字符串数组，例如 ["transformer","注意力机制"]，不要任何其他文字。',
+    },
+    { role: 'user', content: content.slice(0, 4_000) },
+  ]
+}
+
+export function parseTags(text: string): string[] {
+  const m = text.match(/\[[\s\S]*?\]/)
+  if (!m) return []
+  try {
+    const arr = JSON.parse(m[0]) as unknown
+    if (!Array.isArray(arr)) return []
+    return arr
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map(t => t.trim())
+      .slice(0, 4)
+  } catch {
+    return []
+  }
+}
