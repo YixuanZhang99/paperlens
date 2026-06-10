@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "e2e:electron": "electron-vite build && electron scripts/electron-smoke.mjs",
-    "e2e:real": "vitest run tests/e2e/real-api.smoke.test.ts"
+    "e2e:real": "vitest run tests/e2e/real-api.smoke.test.ts",
+    "e2e:drive": "electron-vite build && electron scripts/e2e-drive.mjs"
   },
   "build": {
     "appId": "com.paperlens.app",
