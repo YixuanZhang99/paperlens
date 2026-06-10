@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags } from './services/ai-chat'
+import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, insertChunks, searchChunks, kbStatus, indexedPaperKeys } from './services/kb'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
 function toArrayBuffer(u: Uint8Array): ArrayBuffer {
@@ -92,6 +93,45 @@ export function registerIpc(c: Container) {
     const pageId = await c.notion().sync(note, args.paper)
     c.notesRepo.markSynced(note.id, pageId)
     return pageId
+  })
+
+  ipcMain.handle('notes:listAll', () => c.notesRepo.listAll())
+
+  ipcMain.handle('kb:status', async () => {
+    const total = (await c.zotero().listPapers()).length
+    return { ...kbStatus(c.db), totalPapers: total }
+  })
+
+  // 全库索引：逐篇本地抽取 → 切块入库；kb:progress 推进度；单篇失败跳过
+  ipcMain.handle('kb:index', async (event) => {
+    const papers = await c.zotero().listPapers()
+    const done = indexedPaperKeys(c.db)
+    let indexed = 0, skipped = 0, processed = 0
+    for (const p of papers) {
+      processed++
+      if (done.has(p.key)) { event.sender.send('kb:progress', processed, papers.length, p.title); continue }
+      try {
+        const text = await getPaperTextCached(c, p)
+        if (text) { insertChunks(c.db, p.key, p.title, chunkText(text)); indexed++ }
+        else skipped++
+      } catch { skipped++ }
+      event.sender.send('kb:progress', processed, papers.length, p.title)
+    }
+    return { indexed, skipped, ...kbStatus(c.db) }
+  })
+
+  ipcMain.handle('kb:ask', async (event, question: string) => {
+    let terms: string[] = []
+    try { terms = parseQueryTerms(await c.ai().complete(buildQueryExpansionMessages(question))) } catch { /* 扩写失败回退 */ }
+    if (terms.length === 0) terms = [question]
+    const hits = searchChunks(c.db, terms)
+    if (hits.length === 0) throw new Error('知识库中没有检索到相关内容，请先更新索引或换个问法')
+    const messages = buildKbAnswerMessages(question, hits.map(h => ({ paperTitle: h.paperTitle, text: h.text })))
+    const answer = await c.ai().stream(messages, (delta, kind) => event.sender.send('kb:token', delta, kind))
+    const seen = new Set<string>()
+    const sources = hits.filter(h => !seen.has(h.paperKey) && seen.add(h.paperKey))
+      .map(h => ({ paperKey: h.paperKey, title: h.paperTitle }))
+    return { answer, sources }
   })
 
   // 一键结构化精读：流式生成 → 自动打标签 → 直接存为笔记

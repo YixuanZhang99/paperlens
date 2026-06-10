@@ -31,6 +31,22 @@ const api = {
       ipcRenderer.removeListener('deepread:token', listener)
     })
   },
+  listAllNotes: (): Promise<Note[]> => ipcRenderer.invoke('notes:listAll'),
+  kbStatus: (): Promise<{ indexedPapers: number; totalChunks: number; totalPapers: number }> =>
+    ipcRenderer.invoke('kb:status'),
+  kbIndex: (onProgress: (done: number, total: number, title: string) => void): Promise<{ indexed: number; skipped: number }> => {
+    const listener = (_e: Electron.IpcRendererEvent, done: number, total: number, title: string) => onProgress(done, total, title)
+    ipcRenderer.on('kb:progress', listener)
+    return ipcRenderer.invoke('kb:index').finally(() => ipcRenderer.removeListener('kb:progress', listener))
+  },
+  kbAsk: (
+    question: string,
+    onToken: (delta: string, kind: 'content' | 'reasoning') => void,
+  ): Promise<{ answer: string; sources: Array<{ paperKey: string; title: string }> }> => {
+    const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
+    ipcRenderer.on('kb:token', listener)
+    return ipcRenderer.invoke('kb:ask', question).finally(() => ipcRenderer.removeListener('kb:token', listener))
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
