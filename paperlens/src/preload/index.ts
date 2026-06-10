@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppConfig, ChatMessage, Note, Paper, ZoteroCollection } from '@shared/types'
+import type { ChatRecord } from '../main/services/chat-repo'
 
 const api = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
@@ -13,13 +14,18 @@ const api = {
   streamChat: (
     args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string; deepThink?: boolean },
     onToken: (delta: string, kind: 'content' | 'reasoning') => void,
-  ): Promise<string> => {
+  ): Promise<{ text: string; truncated: boolean; usedChars: number; totalChars: number }> => {
     const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
     ipcRenderer.on('chat:token', listener)
     return ipcRenderer.invoke('chat:stream', args).finally(() => {
       ipcRenderer.removeListener('chat:token', listener)
     })
   },
+  stopChat: (): Promise<void> => ipcRenderer.invoke('chat:stop'),
+  loadChat: (paperKey: string): Promise<ChatRecord[]> => ipcRenderer.invoke('chat:history', paperKey),
+  appendChat: (m: { paperKey: string; role: 'user' | 'assistant'; content: string; reasoning?: string | null }): Promise<ChatRecord> => ipcRenderer.invoke('chat:append', m),
+  clearChat: (paperKey: string): Promise<void> => ipcRenderer.invoke('chat:clear', paperKey),
+  getFollowups: (a: { paperTitle: string; lastAnswer: string }): Promise<string[]> => ipcRenderer.invoke('chat:followups', a),
   addNote: (n: { paperKey: string; content: string; tags: string[]; autoTag?: boolean }): Promise<Note> =>
     ipcRenderer.invoke('notes:add', n),
   listNotes: (paperKey: string): Promise<Note[]> => ipcRenderer.invoke('notes:list', paperKey),

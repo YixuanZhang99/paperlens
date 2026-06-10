@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
-import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags } from './services/ai-chat'
+import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
 import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys } from './services/kb'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
+
+let currentAbort: AbortController | null = null
 
 function toArrayBuffer(u: Uint8Array): ArrayBuffer {
   return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer
@@ -71,14 +73,34 @@ export function registerIpc(c: Container) {
   })
 
   ipcMain.handle('chat:send', async (_e, args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }) => {
-    const messages = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
+    const { messages } = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
     return c.ai().complete(messages)
   })
 
   ipcMain.handle('chat:stream', async (event, args: { paper: Paper; paperText: string; history: ChatMessage[]; input: string; deepThink?: boolean }) => {
-    const messages = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
-    return c.ai(args.deepThink ? 'deepseek-reasoner' : undefined)
-      .stream(messages, (delta, kind) => event.sender.send('chat:token', delta, kind))
+    const { messages, truncated, usedChars, totalChars } = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
+    currentAbort = new AbortController()
+    try {
+      const text = await c.ai(args.deepThink ? 'deepseek-reasoner' : undefined)
+        .stream(messages, (delta, kind) => event.sender.send('chat:token', delta, kind), currentAbort.signal)
+      return { text, truncated, usedChars, totalChars }
+    } finally {
+      currentAbort = null
+    }
+  })
+
+  ipcMain.handle('chat:stop', () => { currentAbort?.abort() })
+
+  ipcMain.handle('chat:history', (_e, paperKey: string) => c.chatRepo.listByPaper(paperKey))
+  ipcMain.handle('chat:append', (_e, m: { paperKey: string; role: 'user' | 'assistant'; content: string; reasoning?: string | null }) => c.chatRepo.append(m))
+  ipcMain.handle('chat:clear', (_e, paperKey: string) => c.chatRepo.clearByPaper(paperKey))
+
+  ipcMain.handle('chat:followups', async (_e, a: { paperTitle: string; lastAnswer: string }) => {
+    try {
+      return parseFollowups(await c.ai().complete(buildFollowupMessages(a.paperTitle, a.lastAnswer)))
+    } catch {
+      return []
+    }
   })
 
   ipcMain.handle('notes:add', async (_e, n: { paperKey: string; content: string; tags: string[]; autoTag?: boolean }) => {

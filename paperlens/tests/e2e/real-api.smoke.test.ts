@@ -122,7 +122,7 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
     if (hasDeepSeek) {
       const model = E.DEEPSEEK_MODEL || 'deepseek-chat'
       const paper = { key: 'X', title: paperTitle, authors: [], year: null, abstract: '', attachmentKey: null }
-      const messages = buildMessages({
+      const { messages } = buildMessages({
         paper, paperText: paperText || '（无正文，仅凭标题）', history: [],
         userInput: '用一句话说明这篇论文最核心的贡献。',
       })
