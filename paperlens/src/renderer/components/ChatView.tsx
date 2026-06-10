@@ -14,7 +14,7 @@ const QUICK_PROMPTS: Array<{ label: string; prompt: string }> = [
 // 气泡 = 共享 ChatMessage + 仅 UI 持有的思维链（传给 API 前剥离）
 type Bubble = ChatMessage & { reasoning?: string }
 
-export function ChatView({ paper }: { paper: Paper | null }) {
+export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSaved?: () => void }) {
   const [history, setHistory] = useState<Bubble[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -75,6 +75,7 @@ export function ChatView({ paper }: { paper: Paper | null }) {
     const last = [...history].reverse().find(m => m.role === 'assistant')
     if (last && last.content) {
       await window.api.addNote({ paperKey: paper!.key, content: last.content, tags: [], autoTag: true })
+      onNoteSaved?.()
     }
   }
 

@@ -70,4 +70,16 @@ describe('ReaderView', () => {
     expect(await screen.findByText('nlp')).toBeInTheDocument()
     expect(screen.getByText('attention')).toBeInTheDocument()
   })
+
+  it('refetches notes when notesVersion bumps without resetting the tab', async () => {
+    const note = { id: 'n1', paperKey: 'P1', content: '新笔记', tags: [], createdAt: 1, notionPageId: null }
+    const listNotes = vi.fn(async () => [] as any[])
+    ;(window as any).api = { listNotes }
+    const { rerender } = render(<ReaderView paper={paper} notesVersion={0} />)
+    await waitFor(() => expect(listNotes).toHaveBeenCalledTimes(1))
+    listNotes.mockResolvedValue([note])
+    rerender(<ReaderView paper={paper} notesVersion={1} />)
+    expect(await screen.findByText('新笔记')).toBeInTheDocument()
+    expect(listNotes).toHaveBeenCalledTimes(2)
+  })
 })

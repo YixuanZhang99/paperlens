@@ -8,6 +8,7 @@ import { SettingsView } from './components/SettingsView'
 export function App() {
   const [selected, setSelected] = useState<Paper | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [notesVersion, setNotesVersion] = useState(0)
 
   useEffect(() => {
     if (!showSettings) return
@@ -27,10 +28,10 @@ export function App() {
         </div>
       </nav>
       <section aria-label="阅读" role="region" style={{ overflow: 'auto' }}>
-        <ReaderView paper={selected} />
+        <ReaderView paper={selected} notesVersion={notesVersion} />
       </section>
       <section aria-label="对话" role="region" style={{ overflow: 'auto', borderLeft: '1px solid #ddd' }}>
-        <ChatView paper={selected} />
+        <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} />
       </section>
       {showSettings && (
         <div

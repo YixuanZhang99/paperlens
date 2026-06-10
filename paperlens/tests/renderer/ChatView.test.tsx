@@ -29,6 +29,7 @@ describe('ChatView', () => {
 
   it('saves the last assistant reply as a note', async () => {
     const addNote = vi.fn(async () => ({}))
+    const onNoteSaved = vi.fn()
     ;(window as any).api = {
       getPaperText: vi.fn(async () => 'x'),
       streamChat: vi.fn(async (_args: any, onToken: (d: string) => void) => {
@@ -36,7 +37,7 @@ describe('ChatView', () => {
       }),
       addNote,
     }
-    render(<ChatView paper={paper} />)
+    render(<ChatView paper={paper} onNoteSaved={onNoteSaved} />)
     fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
     fireEvent.click(screen.getByRole('button', { name: /发送/ }))
     await screen.findByText('可保存的学习要点')
@@ -45,6 +46,7 @@ describe('ChatView', () => {
     await waitFor(() => expect(addNote).toHaveBeenCalledWith(
       expect.objectContaining({ paperKey: 'P1', content: '可保存的学习要点', autoTag: true })
     ))
+    await waitFor(() => expect(onNoteSaved).toHaveBeenCalled())
   })
 
   it('shows an error banner when streaming fails', async () => {

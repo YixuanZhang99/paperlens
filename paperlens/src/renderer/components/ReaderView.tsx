@@ -4,7 +4,7 @@ import type { Note, Paper } from '@shared/types'
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export function ReaderView({ paper }: { paper: Paper | null }) {
+export function ReaderView({ paper, notesVersion = 0 }: { paper: Paper | null; notesVersion?: number }) {
   const [notes, setNotes] = useState<Note[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
   const [tab, setTab] = useState<'summary' | 'pdf'>('summary')
@@ -19,9 +19,12 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
     setPdfData(null)
     setError(null)
     setDeepReadPreview('')
+  }, [paper?.key])
+
+  useEffect(() => {
     if (paper) window.api.listNotes(paper.key).then(setNotes)
     else setNotes([])
-  }, [paper?.key])
+  }, [paper?.key, notesVersion])
 
   if (!paper) return <div style={{ padding: 12, color: '#888' }}>从左侧选择论文</div>
 
