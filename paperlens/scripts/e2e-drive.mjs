@@ -188,21 +188,32 @@ app.whenReady().then(async () => {
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('我的笔记')).click(); return true`)
   await waitFor('kb notes tab', `return !!document.querySelector('[role="dialog"][aria-label="知识库"] input[placeholder*="搜索笔记"]')`, 5000)
   await shot('13-kb-notes.png')
-  // 真实全库问答（花少量 DeepSeek 费用，仅 DRIVE_KB_ASK 时跑）：扩写→FTS 检索→流式作答→来源 chips
+  // 真实全库问答（花少量 DeepSeek 费用，仅 DRIVE_KB_ASK 时跑）：扩写→FTS→rerank→流式作答→来源 chips（v2 多轮线程 UI）
   if (process.env.DRIVE_KB_ASK) {
+    const turnsBefore = await js(`return document.querySelectorAll('[role="dialog"][aria-label="知识库"] .kb-turn').length`)
     await js(`const inp=document.querySelector('[role="dialog"][aria-label="知识库"] input[placeholder*="向整个论文库提问"]');
       const setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
       setter.call(inp,'哪些论文研究了大模型的训练或微调方法？'); inp.dispatchEvent(new Event('input',{bubbles:true})); return true`)
     await js(`[...document.querySelectorAll('[role="dialog"][aria-label="知识库"] button')].find(b=>b.textContent.trim()==='提问').click(); return true`)
-    // 等问答真正完成：答案>40 字且「提问」按钮重新可用（asking=false ⇒ promise resolved ⇒ sources 已渲染）
+    // 等该轮完成：新 .kb-turn 出现、答案>40 字、「提问」恢复可用（⇒ sources chips 已渲染）
     await waitFor('kb answered', `
       const d=document.querySelector('[role="dialog"][aria-label="知识库"]'); if(!d) return false
-      const ans=d.querySelector('.kb-answer'); const btn=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='提问')
-      return ans && ans.textContent.length>40 && !ans.textContent.includes('检索并思考中') && btn && !btn.disabled`, 120000, 2000)
+      const turns=d.querySelectorAll('.kb-turn'); if (turns.length <= ${turnsBefore}) return false
+      const a=turns[turns.length-1].querySelector('.kb-a')
+      const btn=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='提问')
+      return a && a.textContent.length>40 && !a.textContent.includes('检索并思考中') && btn && !btn.disabled`, 120000, 2000)
     await shot('14-kb-answer.png')
-    const ans = await js(`const a=document.querySelector('.kb-answer'); return a ? a.textContent.slice(0,50) : ''`)
-    const srcs = await js(`return [...document.querySelectorAll('.kb-sources .chip')].map(c=>c.textContent.trim()).join(' | ')`)
-    ok('kb-ask', `answer:"${ans}…" sources: ${srcs || '(none)'}`)
+    const info = await js(`
+      const d=document.querySelector('[role="dialog"][aria-label="知识库"]')
+      const last=[...d.querySelectorAll('.kb-turn')].pop()
+      const a=last.querySelector('.kb-a').textContent
+      const chips=[...last.querySelectorAll('.kb-sources .chip')].filter(c=>!c.classList.contains('kb-save-note')).map(c=>c.textContent.trim())
+      const cited=[...new Set([...a.matchAll(/\\[来源(\\d+)\\]/g)].map(m=>+m[1]))]
+      return JSON.stringify({ head: a.slice(0,50), chips, cited })`)
+    const kbA = JSON.parse(info)
+    const citedOk = kbA.cited.every(n => n >= 1 && n <= kbA.chips.length)
+    if (!citedOk) fail('kb-ask', `引用编号越界: cited=${JSON.stringify(kbA.cited)} chips=${kbA.chips.length}`)
+    else ok('kb-ask', `answer:"${kbA.head}…" cited=${JSON.stringify(kbA.cited)} chips=${kbA.chips.length}`)
   }
   await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true`)
   ok('knowledge-base', `indexed/total/chunks: ${kbStat}`)

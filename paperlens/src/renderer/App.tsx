@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import type { Paper } from '@shared/types'
 import { LibraryView } from './components/LibraryView'
@@ -24,9 +24,22 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem('pl.chatOpen') !== '0')
 
   // 启动静默增量索引：知识库「永远是新的」（失败忽略，不打扰用户）
+  // 同时预取论文列表缓存，让知识库「打开论文」跳转即时（免去点击时的网络往返）
+  const papersCache = useRef<Paper[]>([])
   useEffect(() => {
     window.api.kbIndex(() => {}).catch(() => {})
+    window.api.listPapers().then(ps => { papersCache.current = ps }).catch(() => {})
   }, [])
+
+  async function openPaperByKey(paperKey: string) {
+    setShowKb(false)
+    let p = papersCache.current.find(x => x.key === paperKey)
+    if (!p) {
+      papersCache.current = await window.api.listPapers().catch(() => [] as Paper[])
+      p = papersCache.current.find(x => x.key === paperKey)
+    }
+    if (p) setSelected(p)
+  }
 
   useEffect(() => {
     localStorage.setItem('pl.navW', String(navW))
@@ -118,12 +131,7 @@ export function App() {
         <div className="modal-backdrop" onClick={() => setShowKb(false)}>
           <div role="dialog" aria-modal="true" aria-label="知识库" className="modal-panel" style={{ width: 'auto' }}
             onClick={e => e.stopPropagation()}>
-            <KnowledgeView onOpenPaper={async (paperKey) => {
-              setShowKb(false)
-              const papers = await window.api.listPapers()
-              const p = papers.find(x => x.key === paperKey)
-              if (p) setSelected(p)
-            }} />
+            <KnowledgeView onOpenPaper={openPaperByKey} />
           </div>
         </div>
       )}
