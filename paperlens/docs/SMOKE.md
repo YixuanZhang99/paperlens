@@ -1,6 +1,6 @@
 # PaperLens 手动冒烟清单
 
-> 自动化测试（`npm test`，48 项）覆盖所有服务逻辑与 UI 交互（含 SSE 流式解析、PDF 标签）。其中：
+> 自动化测试（`npm test`，69 项）覆盖所有服务逻辑与 UI 交互（含 SSE 流式解析、思维链 kind 分发、精读/标签 prompt、PDF 标签）。其中：
 > - **真实 HTTP + 真实 pdf.js 端到端**（`tests/e2e/api-integration.test.ts`）：本地服务器 + 真实 `fetch` 跑实际 Zotero/DeepSeek（complete+stream）/Notion 客户端，并用真实 pdf.js 抽取一份手工 PDF——验证真实网络/解析/流式路径。
 > - **Electron 启动冒烟**（`npm run e2e:electron`，需 GUI 会话）：用真实构建的 preload+renderer 开窗，断言 `window.api` 注入、全部方法到位、IPC 往返成功——抓住 preload 路径类的运行时 bug。
 > - **真实-API 冒烟**（`npm run e2e:real`，需真实凭证经环境变量传入；无凭证则自动跳过）：用真实 `fetch` 打 LIVE Zotero/DeepSeek/Notion，验证你自己的账号配置。Zotero/Notion 只读，DeepSeek 发 1 次小请求；不写入。
@@ -33,6 +33,10 @@ npm run dev      # 开发模式启动
 5. [ ] 点「存为笔记」→ 切到「摘要」标签，「学习笔记」出现该笔记。
 6. [ ] 点笔记的「同步到 Notion」→ Notion 数据库新增一行：Title=论文名、Authors、Year、Tags，正文段落=笔记内容；按钮变为「✓ 已同步 Notion」。
 7. [ ] 再次对同一篇论文的同一笔记同步 → 为更新（PATCH）而非重复新建（注：当前每次「存为笔记」会新建一条本地笔记，已同步的笔记再点同步走 PATCH，仅更新 properties）。
+8. [ ] 右栏点快捷提问 chip（如「核心贡献」）→ 直接发问并流式回答；输入框草稿不被清空。
+9. [ ] 勾「深思」再提问 → 答案上方先流式显示灰色思维链，再出正式回答（deepseek-reasoner，较慢、费用更高）。
+10. [ ] 中栏点「✨ AI 精读」→ 虚线框内流式预览精读内容 → 完成后「学习笔记」出现五段结构化精读笔记，自动带 2-4 个标签 chips。
+11. [ ] 点「存为笔记」保存的对话回复 → 笔记自动带 AI 标签（标签生成失败则为空，不影响保存）；同步到 Notion 后 Tags 列有值。
 
 ## 打包成安装包
 ```bash
