@@ -24,6 +24,8 @@ export function buildMessages(input: BuildMessagesInput): ChatMessage[] {
   return [system, ...recentHistory, { role: 'user', content: input.userInput }]
 }
 
+export type StreamTokenKind = 'content' | 'reasoning'
+
 export interface AiChatDeps {
   apiKey: string
   model: string
@@ -45,7 +47,7 @@ export function createAiChat(deps: AiChatDeps) {
     return data.choices[0]?.message?.content ?? ''
   }
 
-  async function stream(messages: ChatMessage[], onToken: (delta: string) => void): Promise<string> {
+  async function stream(messages: ChatMessage[], onToken: (delta: string, kind: StreamTokenKind) => void): Promise<string> {
     const res = await deps.fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
@@ -69,11 +71,12 @@ export function createAiChat(deps: AiChatDeps) {
         const payload = trimmed.slice(5).trim()
         if (payload === '' || payload === '[DONE]') continue
         try {
-          const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> }
-          const delta = json.choices?.[0]?.delta?.content
-          if (delta) {
-            full += delta
-            onToken(delta)
+          const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }> }
+          const d = json.choices?.[0]?.delta
+          if (d?.reasoning_content) onToken(d.reasoning_content, 'reasoning')
+          if (d?.content) {
+            full += d.content
+            onToken(d.content, 'content')
           }
         } catch {
           // ignore malformed/partial JSON lines

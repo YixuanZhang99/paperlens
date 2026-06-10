@@ -75,4 +75,26 @@ describe('createAiChat.stream', () => {
     expect(full).toBe('片段')
     expect(tokens).toEqual(['片段'])
   })
+
+  it('delivers reasoning_content with kind=reasoning, excluded from the returned text', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      sseResponse([
+        'data: {"choices":[{"delta":{"reasoning_content":"让我想想…"}}]}\n\n',
+        'data: {"choices":[{"delta":{"reasoning_content":"核心是X。"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"答案"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"是X"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-reasoner', fetch })
+    const events: Array<[string, string]> = []
+    const full = await chat.stream([{ role: 'user', content: 'q' }], (d, kind) => events.push([kind, d]))
+    expect(events).toEqual([
+      ['reasoning', '让我想想…'],
+      ['reasoning', '核心是X。'],
+      ['content', '答案'],
+      ['content', '是X'],
+    ])
+    expect(full).toBe('答案是X')
+  })
 })
