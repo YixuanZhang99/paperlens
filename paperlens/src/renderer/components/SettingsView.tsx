@@ -20,11 +20,11 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   if (!cfg) return null
 
   return (
-    <div style={{ padding: 16, display: 'grid', gap: 10, maxWidth: 480 }}>
+    <div className="settings">
       <h2>设置</h2>
-      {error && <div role="alert" style={{ color: 'crimson', fontSize: 13 }}>{error}</div>}
+      {error && <div role="alert" className="alert-banner">{error}</div>}
       {FIELDS.map(f => (
-        <label key={f.key} style={{ display: 'grid', gap: 4 }}>
+        <label key={f.key}>
           <span>{f.label}</span>
           <input
             type={f.secret ? 'password' : 'text'}
@@ -32,8 +32,8 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             onChange={e => setCfg({ ...cfg, [f.key]: e.target.value })} />
         </label>
       ))}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={async () => {
+      <div className="settings-actions">
+        <button className="btn-primary" onClick={async () => {
           setError(null)
           try { await window.api.setConfig(cfg); onClose() }
           catch (e) { setError('保存失败：' + errMsg(e)) }

@@ -18,32 +18,30 @@ export function App() {
   }, [showSettings])
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 420px', height: '100vh' }}>
-      <nav aria-label="论文库" style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid #ddd', overflow: 'hidden' }}>
-        <div style={{ padding: 8, borderBottom: '1px solid #eee' }}>
-          <button onClick={() => setShowSettings(true)}>⚙ 设置</button>
+    <div className="app">
+      <nav aria-label="论文库" className="pane-nav">
+        <div className="nav-header">
+          <span className="nav-brand">Paper<span className="accent">Lens</span></span>
+          <button className="btn-ghost" onClick={() => setShowSettings(true)}>⚙ 设置</button>
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div className="nav-scroll">
           <LibraryView onSelect={setSelected} selectedKey={selected?.key ?? null} />
         </div>
       </nav>
-      <section aria-label="阅读" role="region" style={{ overflow: 'auto' }}>
+      <section aria-label="阅读" role="region" className="pane-reader">
         <ReaderView paper={selected} notesVersion={notesVersion} />
       </section>
-      <section aria-label="对话" role="region" style={{ overflow: 'auto', borderLeft: '1px solid #ddd' }}>
+      <section aria-label="对话" role="region" className="pane-chat">
         <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} />
       </section>
       {showSettings && (
-        <div
-          onClick={() => setShowSettings(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-        >
+        <div className="modal-backdrop" onClick={() => setShowSettings(false)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-label="设置"
+            className="modal-panel"
             onClick={(e) => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 8, maxHeight: '90vh', overflow: 'auto' }}
           >
             <SettingsView onClose={() => setShowSettings(false)} />
           </div>
