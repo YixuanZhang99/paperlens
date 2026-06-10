@@ -45,5 +45,10 @@ export function createNotesRepo(deps: NotesRepoDeps) {
     db.prepare('UPDATE notes SET notion_page_id = ? WHERE id = ?').run(notionPageId, id)
   }
 
-  return { add, listByPaper, markSynced }
+  function listAll(): Note[] {
+    const rows = db.prepare('SELECT * FROM notes ORDER BY created_at DESC, id DESC').all() as NoteRow[]
+    return rows.map(rowToNote)
+  }
+
+  return { add, listByPaper, markSynced, listAll }
 }

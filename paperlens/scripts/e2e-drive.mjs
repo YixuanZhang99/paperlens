@@ -93,6 +93,19 @@ app.whenReady().then(async () => {
   await waitFor('pdf canvas', `return document.querySelectorAll('section[aria-label="阅读"] canvas').length > 0`, 30000, 1000)
   await sleep(1500); await shot('03-pdf.png'); ok('pdf-render')
 
+  // ── 3b. zoom in/out re-renders wider/narrower canvases ────────
+  const w0 = await js(`const c=document.querySelector('section[aria-label="阅读"] canvas'); return c ? Math.round(c.getBoundingClientRect().width) : 0`)
+  await js(`[...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '放大').click(); return true`)
+  await waitFor('zoomed in', `const c=document.querySelector('section[aria-label="阅读"] canvas'); return c && c.getBoundingClientRect().width > ${w0 + 20}`, 30000, 1000)
+  await sleep(800); await shot('03b-pdf-zoom.png')
+  const w1 = await js(`const c=document.querySelector('section[aria-label="阅读"] canvas'); return Math.round(c.getBoundingClientRect().width)`)
+  await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '适应宽度').click(); return true`)
+  await waitFor('zoom reset', `const c=document.querySelector('section[aria-label="阅读"] canvas'); return c && Math.abs(c.getBoundingClientRect().width - ${w0}) < 10`, 30000, 1000)
+  ok('pdf-zoom', `${w0}px → ${w1}px → ${w0}px`)
+
+  if (process.env.DRIVE_QUICK) {
+    console.log('DRIVE_QUICK set — skipping AI/Notion steps (4-8)')
+  } else {
   // ── 4. back to summary → ✨ AI 精读 (the user-reported failure) ─
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '摘要').click(); return true`)
   await sleep(300)
@@ -152,6 +165,8 @@ app.whenReady().then(async () => {
     await shot('10-notion-synced.png'); ok('notion-sync')
   } else { fail('notion-sync', 'no sync button found') }
 
+  } // end of !DRIVE_QUICK (AI/Notion steps)
+
   // ── 9. settings modal ─────────────────────────────────────────
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('设置')).click(); return true`)
   await waitFor('settings open', `return !!document.querySelector('[role="dialog"]')`, 5000)
@@ -159,6 +174,38 @@ app.whenReady().then(async () => {
   await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true`)
   await waitFor('settings closed', `return !document.querySelector('[role="dialog"]')`, 5000)
   ok('settings-modal')
+
+  // ── 10. knowledge base: open → REAL full-library indexing completes → notes tab ──
+  await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('知识库')).click(); return true`)
+  await waitFor('kb open', `return !!document.querySelector('[role="dialog"][aria-label="知识库"]')`, 5000)
+  await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('索引状态')).click(); return true`)
+  // 等真实索引收尾：状态行出现且「索引中」消失（首次全库本地抽取可达数分钟）
+  await waitFor('kb indexed', `
+    const d = document.querySelector('[role="dialog"][aria-label="知识库"]')
+    return d && /已索引\\s*\\d+\\s*\\/\\s*\\d+/.test(d.textContent) && !d.textContent.includes('索引中：')`, 300000, 3000)
+  const kbStat = await js(`const d=document.querySelector('[role="dialog"][aria-label="知识库"]'); const m=d.textContent.match(/已索引\\s*(\\d+)\\s*\\/\\s*(\\d+)[^0-9]*(\\d+)\\s*个片段/); return m ? m.slice(1).join('/') : '?'`)
+  await shot('12-knowledge-base.png')
+  await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('我的笔记')).click(); return true`)
+  await waitFor('kb notes tab', `return !!document.querySelector('[role="dialog"][aria-label="知识库"] input[placeholder*="搜索笔记"]')`, 5000)
+  await shot('13-kb-notes.png')
+  // 真实全库问答（花少量 DeepSeek 费用，仅 DRIVE_KB_ASK 时跑）：扩写→FTS 检索→流式作答→来源 chips
+  if (process.env.DRIVE_KB_ASK) {
+    await js(`const inp=document.querySelector('[role="dialog"][aria-label="知识库"] input[placeholder*="向整个论文库提问"]');
+      const setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+      setter.call(inp,'哪些论文研究了大模型的训练或微调方法？'); inp.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+    await js(`[...document.querySelectorAll('[role="dialog"][aria-label="知识库"] button')].find(b=>b.textContent.trim()==='提问').click(); return true`)
+    // 等问答真正完成：答案>40 字且「提问」按钮重新可用（asking=false ⇒ promise resolved ⇒ sources 已渲染）
+    await waitFor('kb answered', `
+      const d=document.querySelector('[role="dialog"][aria-label="知识库"]'); if(!d) return false
+      const ans=d.querySelector('.kb-answer'); const btn=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='提问')
+      return ans && ans.textContent.length>40 && !ans.textContent.includes('检索并思考中') && btn && !btn.disabled`, 120000, 2000)
+    await shot('14-kb-answer.png')
+    const ans = await js(`const a=document.querySelector('.kb-answer'); return a ? a.textContent.slice(0,50) : ''`)
+    const srcs = await js(`return [...document.querySelectorAll('.kb-sources .chip')].map(c=>c.textContent.trim()).join(' | ')`)
+    ok('kb-ask', `answer:"${ans}…" sources: ${srcs || '(none)'}`)
+  }
+  await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true`)
+  ok('knowledge-base', `indexed/total/chunks: ${kbStat}`)
   } catch (e) {
     fail('driver', e && e.message)
     try { await shot('99-failure.png') } catch {}

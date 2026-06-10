@@ -5,6 +5,7 @@ import { LibraryView } from './components/LibraryView'
 import { ReaderView } from './components/ReaderView'
 import { ChatView } from './components/ChatView'
 import { SettingsView } from './components/SettingsView'
+import { KnowledgeView } from './components/KnowledgeView'
 
 const readW = (k: string, d: number) => {
   const v = Number(localStorage.getItem(k))
@@ -14,6 +15,7 @@ const readW = (k: string, d: number) => {
 export function App() {
   const [selected, setSelected] = useState<Paper | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showKb, setShowKb] = useState(false)
   const [notesVersion, setNotesVersion] = useState(0)
   // 三栏宽度可拖拽、左右栏可收起；宽度与开合记忆到 localStorage
   const [navW, setNavW] = useState(() => readW('pl.navW', 290))
@@ -29,11 +31,11 @@ export function App() {
   }, [navW, chatW, navOpen, chatOpen])
 
   useEffect(() => {
-    if (!showSettings) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowSettings(false) }
+    if (!showSettings && !showKb) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setShowSettings(false); setShowKb(false) } }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [showSettings])
+  }, [showSettings, showKb])
 
   function startDrag(side: 'nav' | 'chat', e: ReactMouseEvent) {
     e.preventDefault()
@@ -63,6 +65,7 @@ export function App() {
             <div className="nav-header">
               <span className="nav-brand">Paper<span className="accent">Lens</span></span>
               <div style={{ display: 'flex', gap: 2 }}>
+                <button className="btn-ghost" onClick={() => setShowKb(true)}>🧠 知识库</button>
                 <button className="btn-ghost" onClick={() => setShowSettings(true)}>⚙ 设置</button>
                 <button className="btn-ghost pane-toggle" aria-label="收起论文库" onClick={() => setNavOpen(false)}>«</button>
               </div>
@@ -103,6 +106,19 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <SettingsView onClose={() => setShowSettings(false)} />
+          </div>
+        </div>
+      )}
+      {showKb && (
+        <div className="modal-backdrop" onClick={() => setShowKb(false)}>
+          <div role="dialog" aria-modal="true" aria-label="知识库" className="modal-panel" style={{ width: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <KnowledgeView onOpenPaper={async (paperKey) => {
+              setShowKb(false)
+              const papers = await window.api.listPapers()
+              const p = papers.find(x => x.key === paperKey)
+              if (p) setSelected(p)
+            }} />
           </div>
         </div>
       )}

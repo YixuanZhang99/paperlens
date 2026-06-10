@@ -18,4 +18,25 @@ describe('db.migrate', () => {
     migrate(db)
     expect(() => migrate(db)).not.toThrow()
   })
+
+  it('creates chunks table and chunks_fts with sync triggers', () => {
+    const db = new Database(':memory:')
+    migrate(db)
+    db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text) VALUES (?,?,?,?)')
+      .run('P1', '论文一', 0, '中期训练是预训练与微调之间的关键阶段')
+    const hit = db.prepare(
+      `SELECT c.paper_key FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid WHERE chunks_fts MATCH ?`
+    ).all('"中期训练"')
+    expect(hit).toEqual([{ paper_key: 'P1' }])
+  })
+
+  it('fts index follows chunk deletion', () => {
+    const db = new Database(':memory:')
+    migrate(db)
+    db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text) VALUES (?,?,?,?)')
+      .run('P1', 'T', 0, 'transformer attention mechanism')
+    db.prepare('DELETE FROM chunks WHERE paper_key = ?').run('P1')
+    const hit = db.prepare(`SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH ?`).all('attention')
+    expect(hit).toEqual([])
+  })
 })
