@@ -57,12 +57,14 @@ export interface ChunkHit {
 }
 
 export function insertChunks(db: DatabaseType.Database, paperKey: string, paperTitle: string, chunks: string[]): void {
-  db.prepare('DELETE FROM chunks WHERE paper_key = ?').run(paperKey)
+  const del = db.prepare('DELETE FROM chunks WHERE paper_key = ?')
   const ins = db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text) VALUES (?,?,?,?)')
-  const all = db.transaction((cs: string[]) => {
+  // 删除与插入同事务：重建索引中途失败时回滚，不会把论文「越索引越没了」
+  const replace = db.transaction((cs: string[]) => {
+    del.run(paperKey)
     cs.forEach((c, i) => ins.run(paperKey, paperTitle, i, c))
   })
-  all(chunks)
+  replace(chunks)
 }
 
 export function indexedPaperKeys(db: DatabaseType.Database): Set<string> {
