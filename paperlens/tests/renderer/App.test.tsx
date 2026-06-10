@@ -3,8 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { App } from '../../src/renderer/App'
 
 beforeEach(() => {
+  localStorage.clear()
   ;(window as any).api = {
     listPapers: vi.fn(async () => []),
+    listCollections: vi.fn(async () => []),
     getConfig: vi.fn(async () => ({ zoteroApiKey: '', zoteroUserId: '', deepseekApiKey: '', deepseekModel: 'deepseek-chat', notionToken: '', notionDatabaseId: '' })),
   }
 })
@@ -34,5 +36,23 @@ describe('App', () => {
     expect(screen.queryByRole('dialog')).toBeInTheDocument()
     fireEvent.click(dialog.parentElement!) // the backdrop → closes
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('collapses and expands the library pane', async () => {
+    render(<App />)
+    expect(await screen.findByText('全部论文')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '收起论文库' }))
+    expect(screen.queryByText('全部论文')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '展开论文库' }))
+    expect(await screen.findByText('全部论文')).toBeInTheDocument()
+  })
+
+  it('collapses and expands the chat pane', async () => {
+    render(<App />)
+    expect(await screen.findByText('请选择一篇论文开始对话')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '收起对话' }))
+    expect(screen.queryByText('请选择一篇论文开始对话')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '展开对话' }))
+    expect(await screen.findByText('请选择一篇论文开始对话')).toBeInTheDocument()
   })
 })
