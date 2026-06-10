@@ -29,4 +29,13 @@ describe('NotesRepo', () => {
     const [reloaded] = r.listByPaper('P1')
     expect(reloaded.notionPageId).toBe('notion-123')
   })
+
+  it('lists all notes across papers, newest first', () => {
+    const r = repo()
+    r.add({ paperKey: 'P1', content: '一', tags: [] })
+    r.add({ paperKey: 'P2', content: '二', tags: ['x'] })
+    const all = r.listAll()
+    expect(all.map(n => n.paperKey)).toEqual(['P2', 'P1'])
+    expect(all[0].tags).toEqual(['x'])
+  })
 })
