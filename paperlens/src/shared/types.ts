@@ -36,3 +36,10 @@ export const AppConfigSchema = z.object({
   notionDatabaseId: z.string().default(''),
 })
 export type AppConfig = z.infer<typeof AppConfigSchema>
+
+// Zotero 文件夹（collection），parentKey 为 null 表示顶层
+export interface ZoteroCollection {
+  key: string
+  name: string
+  parentKey: string | null
+}

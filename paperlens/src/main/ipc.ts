@@ -55,7 +55,8 @@ export function registerIpc(c: Container) {
   ipcMain.handle('config:get', () => c.configStore.get())
   ipcMain.handle('config:set', (_e, patch: Partial<AppConfig>) => c.configStore.set(patch))
 
-  ipcMain.handle('zotero:list', () => c.zotero().listPapers())
+  ipcMain.handle('zotero:list', (_e, collectionKey: string | null) => c.zotero().listPapers(collectionKey))
+  ipcMain.handle('zotero:collections', () => c.zotero().listCollections())
 
   // 返回论文全文（带 sqlite 缓存）
   ipcMain.handle('paper:text', (_e, paper: Paper): Promise<string> => getPaperTextCached(c, paper))

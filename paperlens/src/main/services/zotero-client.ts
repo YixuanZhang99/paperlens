@@ -45,12 +45,26 @@ export function createZoteroClient(deps: ZoteroDeps) {
   const base = deps.baseUrl ?? 'https://api.zotero.org'
   const headers = { 'Zotero-API-Key': deps.apiKey, 'Zotero-API-Version': '3' }
 
-  async function listPapers(limit = 100): Promise<Paper[]> {
-    const url = `${base}/users/${deps.userId}/items?limit=${limit}&sort=dateModified&direction=desc`
+  // collectionKey 为空 = 整库；否则只取该文件夹（collection）内条目
+  async function listPapers(collectionKey?: string | null, limit = 100): Promise<Paper[]> {
+    const scope = collectionKey ? `collections/${collectionKey}/items` : 'items'
+    const url = `${base}/users/${deps.userId}/${scope}?limit=${limit}&sort=dateModified&direction=desc`
     const res = await deps.fetch(url, { headers })
     if (!res.ok) throw new Error(`Zotero listPapers failed: ${res.status}`)
     const items = (await res.json()) as ZoteroItem[]
     return items.filter(i => PAPER_TYPES.has(i.data.itemType)).map(toPaper)
+  }
+
+  async function listCollections(): Promise<Array<{ key: string; name: string; parentKey: string | null }>> {
+    const url = `${base}/users/${deps.userId}/collections?limit=200`
+    const res = await deps.fetch(url, { headers })
+    if (!res.ok) throw new Error(`Zotero listCollections failed: ${res.status}`)
+    const cols = (await res.json()) as Array<{ data: { key: string; name: string; parentCollection?: string | false } }>
+    return cols.map(c => ({
+      key: c.data.key,
+      name: c.data.name,
+      parentKey: c.data.parentCollection ? c.data.parentCollection : null,
+    }))
   }
 
   async function findPdfAttachment(parentKey: string): Promise<string | null> {
@@ -78,5 +92,5 @@ export function createZoteroClient(deps: ZoteroDeps) {
     return res.arrayBuffer()
   }
 
-  return { listPapers, findPdfAttachment, findPdfAttachmentInfo, downloadAttachment }
+  return { listPapers, listCollections, findPdfAttachment, findPdfAttachmentInfo, downloadAttachment }
 }

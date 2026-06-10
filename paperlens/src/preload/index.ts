@@ -1,10 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppConfig, ChatMessage, Note, Paper } from '@shared/types'
+import type { AppConfig, ChatMessage, Note, Paper, ZoteroCollection } from '@shared/types'
 
 const api = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
   setConfig: (p: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke('config:set', p),
-  listPapers: (): Promise<Paper[]> => ipcRenderer.invoke('zotero:list'),
+  listPapers: (collectionKey?: string | null): Promise<Paper[]> => ipcRenderer.invoke('zotero:list', collectionKey ?? null),
+  listCollections: (): Promise<ZoteroCollection[]> => ipcRenderer.invoke('zotero:collections'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),
   getPaperPdf: (paper: Paper): Promise<ArrayBuffer | null> => ipcRenderer.invoke('paper:pdfBytes', paper),
   sendChat: (a: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }): Promise<string> =>

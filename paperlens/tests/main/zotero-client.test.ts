@@ -35,6 +35,38 @@ describe('zotero-client.listPapers', () => {
     const client = createZoteroClient({ apiKey: 'bad', userId: '123', fetch })
     await expect(client.listPapers()).rejects.toThrow(/Zotero.*403/)
   })
+
+  it('scopes the request to a collection when collectionKey is given', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify([sampleItem('AAA', 'T')]), { status: 200 }))
+    const client = createZoteroClient({ apiKey: 'k', userId: '123', fetch })
+    await client.listPapers('COL1')
+    expect(String(fetch.mock.calls[0]![0])).toContain('/users/123/collections/COL1/items')
+  })
+})
+
+describe('zotero-client.listCollections', () => {
+  it('maps collections to {key, name, parentKey} with null for top-level', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify([
+        { key: 'C1', data: { key: 'C1', name: '机器学习', parentCollection: false } },
+        { key: 'C2', data: { key: 'C2', name: 'LLM', parentCollection: 'C1' } },
+      ]), { status: 200 })
+    )
+    const client = createZoteroClient({ apiKey: 'k', userId: '123', fetch })
+    const cols = await client.listCollections()
+    expect(String(fetch.mock.calls[0]![0])).toContain('/users/123/collections')
+    expect(cols).toEqual([
+      { key: 'C1', name: '机器学习', parentKey: null },
+      { key: 'C2', name: 'LLM', parentKey: 'C1' },
+    ])
+  })
+
+  it('throws on non-ok', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response('x', { status: 500 }))
+    const client = createZoteroClient({ apiKey: 'k', userId: '123', fetch })
+    await expect(client.listCollections()).rejects.toThrow(/Zotero.*500/)
+  })
 })
 
 describe('zotero-client.findPdfAttachment', () => {
