@@ -43,7 +43,7 @@ describe('ChatView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /存为笔记/ }))
     await waitFor(() => expect(addNote).toHaveBeenCalledWith(
-      expect.objectContaining({ paperKey: 'P1', content: '可保存的学习要点' })
+      expect.objectContaining({ paperKey: 'P1', content: '可保存的学习要点', autoTag: true })
     ))
   })
 
@@ -56,5 +56,40 @@ describe('ChatView', () => {
     fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
     fireEvent.click(screen.getByRole('button', { name: /发送/ }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/失败/))
+  })
+
+  it('renders quick prompt chips and sends the prompt on click', async () => {
+    const streamChat = vi.fn(async (_a: any, onToken: any) => { onToken('好的', 'content'); return '好的' })
+    ;(window as any).api = { getPaperText: vi.fn(async () => 'x'), streamChat }
+    render(<ChatView paper={paper} />)
+    fireEvent.click(screen.getByRole('button', { name: '核心贡献' }))
+    expect(await screen.findByText('好的')).toBeInTheDocument()
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({ input: expect.stringContaining('核心贡献') }),
+      expect.any(Function),
+    )
+  })
+
+  it('passes deepThink=true when the 深思 toggle is on', async () => {
+    const streamChat = vi.fn(async () => '答')
+    ;(window as any).api = { getPaperText: vi.fn(async () => 'x'), streamChat }
+    render(<ChatView paper={paper} />)
+    fireEvent.click(screen.getByLabelText('深思'))
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    await waitFor(() => expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({ deepThink: true }), expect.any(Function)))
+  })
+
+  it('renders reasoning tokens in a separate dimmed block above the answer', async () => {
+    const streamChat = vi.fn(async (_a: any, onToken: any) => {
+      onToken('思考过程…', 'reasoning'); onToken('最终答案', 'content'); return '最终答案'
+    })
+    ;(window as any).api = { getPaperText: vi.fn(async () => 'x'), streamChat }
+    render(<ChatView paper={paper} />)
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    expect(await screen.findByText('思考过程…')).toBeInTheDocument()
+    expect(await screen.findByText('最终答案')).toBeInTheDocument()
   })
 })
