@@ -50,5 +50,9 @@ export function createNotesRepo(deps: NotesRepoDeps) {
     return rows.map(rowToNote)
   }
 
-  return { add, listByPaper, markSynced, listAll }
+  function remove(id: string): void {
+    db.prepare('DELETE FROM notes WHERE id = ?').run(id)
+  }
+
+  return { add, listByPaper, markSynced, listAll, remove }
 }

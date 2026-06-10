@@ -112,7 +112,7 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
           <input
             placeholder="输入问题…" value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') send() }} />
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) send() }} />
           <label className="deepthink-label">
             <input type="checkbox" checked={deepThink} onChange={e => setDeepThink(e.target.checked)} />深思
           </label>

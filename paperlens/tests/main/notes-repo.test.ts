@@ -30,6 +30,18 @@ describe('NotesRepo', () => {
     expect(reloaded.notionPageId).toBe('notion-123')
   })
 
+  it('removes a note by id and ignores unknown ids', () => {
+    const r = repo()
+    const a = r.add({ paperKey: 'P1', content: '要删', tags: [] })
+    const b = r.add({ paperKey: 'P1', content: '保留', tags: [] })
+    r.remove(a.id)
+    const all = r.listAll()
+    expect(all).toHaveLength(1)
+    expect(all[0].id).toBe(b.id)
+    expect(() => r.remove('no-such-id')).not.toThrow()
+    expect(r.listAll()).toHaveLength(1)
+  })
+
   it('lists all notes across papers, newest first', () => {
     const r = repo()
     r.add({ paperKey: 'P1', content: '一', tags: [] })

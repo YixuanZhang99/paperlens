@@ -96,6 +96,23 @@ describe('ChatView', () => {
       expect.objectContaining({ deepThink: true }), expect.any(Function)))
   })
 
+  it('sends on plain Enter but not while IME composition is active', async () => {
+    const streamChat = vi.fn(async (_a: any, onToken: any) => { onToken('答', 'content'); return '答' })
+    ;(window as any).api = { getPaperText: vi.fn(async () => 'x'), streamChat }
+    render(<ChatView paper={paper} />)
+    const input = screen.getByPlaceholderText(/输入问题/)
+
+    fireEvent.change(input, { target: { value: 'zhongwen' } })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(streamChat).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '中文问题' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(streamChat).toHaveBeenCalledTimes(1))
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({ input: '中文问题' }), expect.any(Function))
+  })
+
   it('renders reasoning tokens in a separate dimmed block above the answer', async () => {
     const streamChat = vi.fn(async (_a: any, onToken: any) => {
       onToken('思考过程…', 'reasoning'); onToken('最终答案', 'content'); return '最终答案'
