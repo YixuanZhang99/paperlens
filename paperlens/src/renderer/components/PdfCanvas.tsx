@@ -15,17 +15,24 @@ export default function PdfCanvas({ data }: { data: ArrayBuffer }) {
     const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) })
     loadingTask.promise
       .then(async (doc) => {
+        // 清晰渲染：CSS 尺寸跟随容器宽，物理像素 ×devicePixelRatio（Retina 不再模糊）
+        const containerWidth = container.clientWidth || 800
+        const dpr = window.devicePixelRatio || 1
         for (let i = 1; i <= doc.numPages && !cancelled; i++) {
           const page = await doc.getPage(i)
-          const viewport = page.getViewport({ scale: 1.3 })
+          const base = page.getViewport({ scale: 1 })
+          const viewport = page.getViewport({ scale: containerWidth / base.width })
           const canvas = document.createElement('canvas')
-          canvas.width = viewport.width
-          canvas.height = viewport.height
-          canvas.style.cssText = 'width:100%;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.2)'
+          canvas.width = Math.floor(viewport.width * dpr)
+          canvas.height = Math.floor(viewport.height * dpr)
+          canvas.style.cssText = `width:100%;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.2)`
           const ctx = canvas.getContext('2d')
           if (!ctx) continue
           container.appendChild(canvas)
-          await page.render({ canvasContext: ctx, viewport }).promise
+          await page.render({
+            canvasContext: ctx, viewport,
+            transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
+          }).promise
         }
       })
       .catch((err) => {
