@@ -11,11 +11,14 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
   const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deepReading, setDeepReading] = useState(false)
+  const [deepReadPreview, setDeepReadPreview] = useState('')
 
   useEffect(() => {
     setTab('summary')
     setPdfData(null)
     setError(null)
+    setDeepReadPreview('')
     if (paper) window.api.listNotes(paper.key).then(setNotes)
     else setNotes([])
   }, [paper?.key])
@@ -46,6 +49,21 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
     }
   }
 
+  async function deepRead() {
+    setError(null)
+    setDeepReading(true)
+    setDeepReadPreview('')
+    try {
+      await window.api.deepReadPaper(paper!, (delta, kind) => {
+        if (kind !== 'reasoning') setDeepReadPreview(p => p + delta)
+      })
+      setNotes(await window.api.listNotes(paper!.key))
+      setDeepReadPreview('')
+    } catch (e) {
+      setError('AI 精读失败：' + errMsg(e))
+    } finally { setDeepReading(false) }
+  }
+
   return (
     <div style={{ padding: 16, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -58,12 +76,25 @@ export function ReaderView({ paper }: { paper: Paper | null }) {
           <h2>{paper.title}</h2>
           <p style={{ color: '#666' }}>{paper.authors.join(', ')} · {paper.year ?? ''}</p>
           <p>{paper.abstract}</p>
-          <h3>学习笔记</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: '8px 0' }}>学习笔记</h3>
+            <button onClick={deepRead} disabled={deepReading}>✨ AI 精读</button>
+          </div>
+          <div style={{ display: deepReading || deepReadPreview ? 'block' : 'none', color: '#999', fontSize: 12, whiteSpace: 'pre-wrap', border: '1px dashed #ddd', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+            {deepReadPreview || (deepReading ? '正在精读…' : '')}
+          </div>
           {notes.length === 0 && <p style={{ color: '#999' }}>暂无笔记，去右侧与 AI 对话并「存为笔记」。</p>}
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {notes.map(n => (
               <li key={n.id} style={{ border: '1px solid #eee', borderRadius: 8, padding: 10, marginBottom: 8 }}>
                 <div>{n.content}</div>
+                {n.tags.length > 0 && (
+                  <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {n.tags.map(t => (
+                      <span key={t} style={{ fontSize: 11, background: '#eef', borderRadius: 4, padding: '1px 6px' }}>{t}</span>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginTop: 6, fontSize: 12, color: '#888' }}>
                   {n.notionPageId ? '✓ 已同步 Notion' : (
                     <button onClick={() => sync(n.id)} disabled={syncing === n.id}>同步到 Notion</button>

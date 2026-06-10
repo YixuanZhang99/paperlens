@@ -46,4 +46,28 @@ describe('ReaderView', () => {
     fireEvent.click(screen.getByRole('button', { name: /同步到 Notion/ }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/失败/))
   })
+
+  it('runs AI deep-read: shows streaming preview then refreshes notes', async () => {
+    const newNote = { id: 'n2', paperKey: 'P1', content: '## 背景问题…', tags: ['transformer'], createdAt: 2, notionPageId: null }
+    const listNotes = vi.fn(async () => [] as any[])
+    const deepReadPaper = vi.fn(async (_p: any, onToken: any) => {
+      onToken('## 背景问题…', 'content')
+      listNotes.mockResolvedValue([newNote])
+      return newNote
+    })
+    ;(window as any).api = { listNotes, deepReadPaper }
+    render(<ReaderView paper={paper} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 精读/ }))
+    expect(await screen.findByText('## 背景问题…')).toBeInTheDocument()
+    expect(deepReadPaper).toHaveBeenCalledWith(paper, expect.any(Function))
+    await waitFor(() => expect(listNotes).toHaveBeenCalledTimes(2)) // 挂载 1 次 + 完成后刷新 1 次
+  })
+
+  it('renders note tags as chips', async () => {
+    const note = { id: 'n1', paperKey: 'P1', content: '要点', tags: ['nlp', 'attention'], createdAt: 1, notionPageId: null }
+    ;(window as any).api = { listNotes: vi.fn(async () => [note]) }
+    render(<ReaderView paper={paper} />)
+    expect(await screen.findByText('nlp')).toBeInTheDocument()
+    expect(screen.getByText('attention')).toBeInTheDocument()
+  })
 })
