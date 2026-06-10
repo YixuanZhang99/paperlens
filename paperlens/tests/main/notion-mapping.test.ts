@@ -27,4 +27,16 @@ describe('noteToNotionPage', () => {
     const page = noteToNotionPage(note, { ...paper, year: null }, 'db-123')
     expect(page.properties.Year).toBeUndefined()
   })
+
+  it('splits long content into ≤2000-char paragraph blocks (Notion rich_text limit)', () => {
+    const longNote = { ...note, content: 'A'.repeat(4500) }
+    const page = noteToNotionPage(longNote, paper, 'db-123')
+    expect(page.children).toHaveLength(3)
+    for (const block of page.children) {
+      expect(block.type).toBe('paragraph')
+      expect(block.paragraph.rich_text[0].text.content.length).toBeLessThanOrEqual(2000)
+    }
+    const joined = page.children.map((b) => b.paragraph.rich_text[0].text.content).join('')
+    expect(joined).toBe(longNote.content)
+  })
 })

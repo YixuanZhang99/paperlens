@@ -10,12 +10,17 @@ export function noteToNotionPage(note: Note, paper: Paper, databaseId: string) {
   }
   if (paper.year !== null) properties.Year = { number: paper.year }
 
+  // Notion 限制单个 rich_text 内容 ≤2000 字符——长笔记按 2000 切成多个段落块
+  const chunks: string[] = []
+  for (let i = 0; i < note.content.length; i += 2000) chunks.push(note.content.slice(i, i + 2000))
+  if (chunks.length === 0) chunks.push('')
+
   return {
     parent: { database_id: databaseId },
     properties,
-    children: [
-      { object: 'block', type: 'paragraph', paragraph: { rich_text: txt(note.content) } },
-    ],
+    children: chunks.map(c => (
+      { object: 'block', type: 'paragraph', paragraph: { rich_text: txt(c) } }
+    )),
   }
 }
 
