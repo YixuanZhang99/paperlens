@@ -19,10 +19,17 @@ const api = {
       ipcRenderer.removeListener('chat:token', listener)
     })
   },
-  addNote: (n: { paperKey: string; content: string; tags: string[] }): Promise<Note> =>
+  addNote: (n: { paperKey: string; content: string; tags: string[]; autoTag?: boolean }): Promise<Note> =>
     ipcRenderer.invoke('notes:add', n),
   listNotes: (paperKey: string): Promise<Note[]> => ipcRenderer.invoke('notes:list', paperKey),
   syncNote: (a: { noteId: string; paper: Paper }): Promise<string> => ipcRenderer.invoke('notes:sync', a),
+  deepReadPaper: (paper: Paper, onToken: (delta: string, kind: 'content' | 'reasoning') => void): Promise<Note> => {
+    const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
+    ipcRenderer.on('deepread:token', listener)
+    return ipcRenderer.invoke('paper:deepread', paper).finally(() => {
+      ipcRenderer.removeListener('deepread:token', listener)
+    })
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
