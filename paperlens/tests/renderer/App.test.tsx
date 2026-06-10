@@ -8,6 +8,9 @@ beforeEach(() => {
     listPapers: vi.fn(async () => []),
     listCollections: vi.fn(async () => []),
     getConfig: vi.fn(async () => ({ zoteroApiKey: '', zoteroUserId: '', deepseekApiKey: '', deepseekModel: 'deepseek-chat', notionToken: '', notionDatabaseId: '' })),
+    listAllNotes: vi.fn(async () => []),
+    kbStatus: vi.fn(async () => ({ indexedPapers: 0, totalPapers: 0, totalChunks: 0 })),
+    kbIndex: vi.fn(async () => ({ indexed: 0, skipped: 0 })),
   }
 })
 
@@ -54,5 +57,13 @@ describe('App', () => {
     expect(screen.queryByText('请选择一篇论文开始对话')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '展开对话' }))
     expect(await screen.findByText('请选择一篇论文开始对话')).toBeInTheDocument()
+  })
+
+  it('opens the knowledge base overlay and closes it with Escape', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /知识库/ }))
+    expect(await screen.findByRole('dialog', { name: /知识库/ })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 })
