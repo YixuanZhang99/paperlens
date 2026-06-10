@@ -93,6 +93,19 @@ app.whenReady().then(async () => {
   await waitFor('pdf canvas', `return document.querySelectorAll('section[aria-label="阅读"] canvas').length > 0`, 30000, 1000)
   await sleep(1500); await shot('03-pdf.png'); ok('pdf-render')
 
+  // ── 3b. zoom in/out re-renders wider/narrower canvases ────────
+  const w0 = await js(`const c=document.querySelector('section[aria-label="阅读"] canvas'); return c ? Math.round(c.getBoundingClientRect().width) : 0`)
+  await js(`[...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '放大').click(); return true`)
+  await waitFor('zoomed in', `const c=document.querySelector('section[aria-label="阅读"] canvas'); return c && c.getBoundingClientRect().width > ${w0 + 20}`, 30000, 1000)
+  await sleep(800); await shot('03b-pdf-zoom.png')
+  const w1 = await js(`const c=document.querySelector('section[aria-label="阅读"] canvas'); return Math.round(c.getBoundingClientRect().width)`)
+  await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '适应宽度').click(); return true`)
+  await waitFor('zoom reset', `const c=document.querySelector('section[aria-label="阅读"] canvas'); return c && Math.abs(c.getBoundingClientRect().width - ${w0}) < 10`, 30000, 1000)
+  ok('pdf-zoom', `${w0}px → ${w1}px → ${w0}px`)
+
+  if (process.env.DRIVE_QUICK) {
+    console.log('DRIVE_QUICK set — skipping AI/Notion steps (4-8)')
+  } else {
   // ── 4. back to summary → ✨ AI 精读 (the user-reported failure) ─
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '摘要').click(); return true`)
   await sleep(300)
@@ -151,6 +164,8 @@ app.whenReady().then(async () => {
     await waitFor('notion synced', `return document.body.textContent.includes('已同步 Notion')`, 60000, 1000)
     await shot('10-notion-synced.png'); ok('notion-sync')
   } else { fail('notion-sync', 'no sync button found') }
+
+  } // end of !DRIVE_QUICK (AI/Notion steps)
 
   // ── 9. settings modal ─────────────────────────────────────────
   await js(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('设置')).click(); return true`)
