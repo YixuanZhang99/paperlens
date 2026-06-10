@@ -14,15 +14,23 @@ export function chunkText(text: string, size = 1200, overlap = 150): string[] {
   return out
 }
 
-export function buildQueryExpansionMessages(question: string): ChatMessage[] {
+export function buildQueryExpansionMessages(question: string, history?: ChatMessage[]): ChatMessage[] {
+  let system =
+    '你是文献检索助手。把用户问题改写成 3-6 个适合全文检索的关键词/短语，' +
+    '必须中英文混合（论文多为英文，需包含英文术语）。' +
+    '只输出一个 JSON 字符串数组，例如 ["RLHF","人类反馈","reward model"]，不要任何其他文字。'
+  if (history && history.length > 0) {
+    // 多轮追问常带指代（「它」「这种方法」），附最近 2 轮摘录帮模型还原具体名词
+    const excerpt = history
+      .slice(-4)
+      .map(m => `${m.role}: ${m.content.slice(0, 200)}`)
+      .join('\n')
+    system +=
+      '\n\n对话摘录（最近的上下文）：\n' + excerpt +
+      '\n\n检索词要解析指代（如「它」「这种方法」），结合摘录替换成具体名词/术语。'
+  }
   return [
-    {
-      role: 'system',
-      content:
-        '你是文献检索助手。把用户问题改写成 3-6 个适合全文检索的关键词/短语，' +
-        '必须中英文混合（论文多为英文，需包含英文术语）。' +
-        '只输出一个 JSON 字符串数组，例如 ["RLHF","人类反馈","reward model"]，不要任何其他文字。',
-    },
+    { role: 'system', content: system },
     { role: 'user', content: question },
   ]
 }
@@ -122,9 +130,35 @@ export interface KbHit {
   text: string
 }
 
-export function buildKbAnswerMessages(question: string, hits: KbHit[]): ChatMessage[] {
-  const sources = hits
-    .map((h, i) => `【来源${i + 1} · ${h.paperTitle}】\n${h.text}`)
+// 按论文聚合检索命中：来源编号以论文为单位，与 UI 的论文 chips 一一对应
+export interface KbSource {
+  paperKey: string
+  paperTitle: string
+  chunks: string[]
+}
+
+const MAX_CHUNKS_PER_SOURCE = 3
+
+export function groupHitsToSources(hits: ChunkHit[]): KbSource[] {
+  const byKey = new Map<string, KbSource>()
+  const out: KbSource[] = []
+  for (const h of hits) {
+    let src = byKey.get(h.paperKey)
+    if (!src) {
+      // 首个命中决定论文顺序（hits 已按相关度排序）
+      src = { paperKey: h.paperKey, paperTitle: h.paperTitle, chunks: [] }
+      byKey.set(h.paperKey, src)
+      out.push(src)
+    }
+    if (src.chunks.length < MAX_CHUNKS_PER_SOURCE) src.chunks.push(h.text)
+  }
+  return out
+}
+
+export function buildKbAnswerMessages(question: string, sources: KbSource[], history?: ChatMessage[]): ChatMessage[] {
+  // 来源按论文编号（同论文多段合并），保证答案里的 [来源N] 与界面第 N 个论文 chip 严格一致
+  const sourceText = sources
+    .map((s, i) => `【来源${i + 1} · ${s.paperTitle}】\n${s.chunks.join('\n---\n')}`)
     .join('\n\n')
   return [
     {
@@ -132,9 +166,44 @@ export function buildKbAnswerMessages(question: string, hits: KbHit[]): ChatMess
       content:
         '你是论文知识库助手。只依据下面提供的论文片段回答用户问题；' +
         '引用某片段的内容时在句末标注 [来源N]（即来源标注）；' +
+        `来源共 ${sources.length} 个，引用标注 [来源N] 必须使用这些编号，不要编造编号；` +
         '如果片段中没有提及答案，明确说明「库内片段没有提及」，不要编造。\n\n' +
-        sources,
+        sourceText,
     },
+    ...(history ?? []),
     { role: 'user', content: question },
   ]
+}
+
+// rerank：让 LLM 给每个检索片段与问题的相关性打分，过滤 bm25 的误命中
+export function buildRerankMessages(question: string, hits: ChunkHit[]): ChatMessage[] {
+  const list = hits
+    .map((h, i) => `[${i + 1}] ${h.text.slice(0, 500)}`)
+    .join('\n\n')
+  return [
+    {
+      role: 'system',
+      content:
+        '你是检索结果重排器。为每个片段与问题的相关性打分 0-3（3=直接回答，0=无关）。' +
+        `只输出一个 JSON 数字数组，长度必须为 ${hits.length}，按片段编号顺序排列，不要任何其他文字。`,
+    },
+    { role: 'user', content: `问题：${question}\n\n片段：\n${list}` },
+  ]
+}
+
+export function parseRerankScores(text: string, count: number): number[] | null {
+  const m = text.match(/\[[\s\S]*?\]/)
+  if (!m) return null
+  try {
+    const arr = JSON.parse(m[0]) as unknown
+    if (!Array.isArray(arr) || arr.length !== count) return null
+    const out: number[] = []
+    for (const v of arr) {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return null
+      out.push(Math.min(3, Math.max(0, v)))
+    }
+    return out
+  } catch {
+    return null
+  }
 }
