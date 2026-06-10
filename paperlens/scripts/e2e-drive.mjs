@@ -79,12 +79,12 @@ app.whenReady().then(async () => {
   }
   try {
   // ── 1. library loads real papers ──────────────────────────────
-  await waitFor('library papers', `return document.querySelectorAll('nav li').length > 0`, 30000)
-  const nPapers = await js(`return document.querySelectorAll('nav li').length`)
+  await waitFor('library papers', `return document.querySelectorAll('nav .paper-item').length > 0`, 30000)
+  const nPapers = await js(`return document.querySelectorAll('nav .paper-item').length`)
   await shot('01-library.png'); ok('library', `${nPapers} papers`)
 
   // ── 2. select first paper → summary ──────────────────────────
-  await js(`document.querySelectorAll('nav li')[0].click(); return true`)
+  await js(`document.querySelectorAll('nav .paper-item')[0].click(); return true`)
   await waitFor('summary title', `const h=document.querySelector('section[aria-label="阅读"] h2'); return !!(h && h.textContent.length > 3)`, 10000)
   await shot('02-summary.png'); ok('select-paper')
 
@@ -166,5 +166,7 @@ app.whenReady().then(async () => {
 
   const passed = results.filter(r => r[1]).length
   console.log(`DRIVE_SUMMARY ${passed}/${results.length} passed`)
+  // 测试窗口及时关闭：先销毁所有窗口再退出，避免残留
+  for (const w of BrowserWindow.getAllWindows()) { try { w.destroy() } catch {} }
   app.exit(results.every(r => r[1]) ? 0 : 1)
 })
