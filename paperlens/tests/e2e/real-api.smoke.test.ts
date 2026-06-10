@@ -120,7 +120,7 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
 
     // ---- DeepSeek (complete + stream) ----
     if (hasDeepSeek) {
-      const model = E.DEEPSEEK_MODEL || 'deepseek-chat'
+      const model = E.DEEPSEEK_MODEL || 'deepseek-v4-flash'
       const paper = { key: 'X', title: paperTitle, authors: [], year: null, abstract: '', attachmentKey: null }
       const { messages } = buildMessages({
         paper, paperText: paperText || '（无正文，仅凭标题）', history: [],
@@ -139,9 +139,9 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
         await tryModel(model)
       } catch (e) {
         log(`DeepSeek ERROR with model="${model}" → ${(e as Error).message}`)
-        if (model !== 'deepseek-chat') {
-          log('DeepSeek: retrying with fallback model "deepseek-chat"…')
-          try { await tryModel('deepseek-chat') } catch (e2) { log('DeepSeek fallback ERROR →', (e2 as Error).message) }
+        if (model !== 'deepseek-v4-flash') {
+          log('DeepSeek: retrying with fallback model "deepseek-v4-flash"…')
+          try { await tryModel('deepseek-v4-flash') } catch (e2) { log('DeepSeek fallback ERROR →', (e2 as Error).message) }
         }
       }
     } else log('DeepSeek: skipped (no creds)')

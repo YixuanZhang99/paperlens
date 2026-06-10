@@ -145,7 +145,7 @@ describe('E2E: full data flow over real HTTP + real pdf.js', () => {
     expect(text).toContain('PDF')
 
     // 4) DeepSeek non-streaming complete over real HTTP
-    const ai = createAiChat({ apiKey: 'dkey', model: 'deepseek-chat', fetch, baseUrl: base })
+    const ai = createAiChat({ apiKey: 'dkey', model: 'deepseek-v4-flash', fetch, baseUrl: base })
     const { messages } = buildMessages({ paper, paperText: text, history: [], userInput: '这篇论文的核心贡献是什么？' })
     const reply = await ai.complete(messages)
     expect(reply).toBe('这篇论文提出了 Transformer。')

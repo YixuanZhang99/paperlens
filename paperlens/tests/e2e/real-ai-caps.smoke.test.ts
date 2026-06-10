@@ -1,6 +1,6 @@
 // MANUAL real-API smoke for the AI-capabilities features (self-skips without creds).
 // Verifies against LIVE DeepSeek (+ local ~/Zotero for real paper text):
-//   1) deepseek-reasoner really streams `reasoning_content` → our kind callback fires
+//   1) deep-think mode (thinking.type=enabled) streams `reasoning_content` → our kind callback fires
 //   2) real tag generation: model obeys the JSON-array prompt and parseTags parses it
 //   3) real deep-read chain: real paper text → streamed five-section note → tags →
 //      saved via the REAL notesRepo (in-memory sqlite)
@@ -26,10 +26,10 @@ const short = (s: string, n = 160) => (s.length > n ? s.slice(0, n) + `… (${s.
 
 describe.skipIf(!E.DEEPSEEK_API_KEY)('REAL AI-capabilities smoke', () => {
   it('reasoner kind-split + real tagging + real deep-read → notesRepo', async () => {
-    const ai = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-chat', fetch })
+    const ai = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-v4-flash', fetch })
 
-    // ---- 1) REAL deepseek-reasoner: reasoning_content must arrive as kind='reasoning' ----
-    const reasoner = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-reasoner', fetch })
+    // ---- 1) REAL deep-think (thinking.type=enabled): reasoning_content must arrive as kind='reasoning' ----
+    const reasoner = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-v4-flash', fetch, deepThink: true })
     let reasoningTokens = 0
     let contentTokens = 0
     let firstContentAfterReasoning = false

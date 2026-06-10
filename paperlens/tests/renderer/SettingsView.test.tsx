@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SettingsView } from '../../src/renderer/components/SettingsView'
 
-const empty = { zoteroApiKey: '', zoteroUserId: '', zoteroDataDir: '', deepseekApiKey: '', deepseekModel: 'deepseek-chat', notionToken: '', notionDatabaseId: '' }
+const empty = { zoteroApiKey: '', zoteroUserId: '', zoteroDataDir: '', deepseekApiKey: '', deepseekModel: 'deepseek-v4-flash', notionToken: '', notionDatabaseId: '' }
 
 describe('SettingsView', () => {
   it('loads existing config and saves edits', async () => {

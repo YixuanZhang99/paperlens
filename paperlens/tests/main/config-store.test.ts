@@ -22,7 +22,7 @@ describe('ConfigStore', () => {
   it('returns schema defaults when nothing saved', () => {
     const { fs, crypto } = fakeBackend()
     const store = createConfigStore({ filePath: '/x', fs, crypto })
-    expect(store.get().deepseekModel).toBe('deepseek-chat')
+    expect(store.get().deepseekModel).toBe('deepseek-v4-flash')
     expect(store.get().zoteroApiKey).toBe('')
   })
 
@@ -39,6 +39,6 @@ describe('ConfigStore', () => {
     const store2 = createConfigStore({ filePath: '/x', fs: backend.fs, crypto: backend.crypto })
     expect(store2.get().zoteroApiKey).toBe('secret')
     expect(store2.get().zoteroUserId).toBe('42')
-    expect(store2.get().deepseekModel).toBe('deepseek-chat') // 未设置项保留默认
+    expect(store2.get().deepseekModel).toBe('deepseek-v4-flash') // 未设置项保留默认
   })
 })

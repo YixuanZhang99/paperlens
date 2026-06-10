@@ -1,4 +1,5 @@
 import type { Paper, ChatMessage } from '@shared/types'
+import { DEFAULT_DEEPSEEK_MODEL } from '@shared/types'
 
 export interface BuildMessagesInput {
   paper: Paper
@@ -48,21 +49,40 @@ export function buildMessages(input: BuildMessagesInput): BuiltContext {
 
 export type StreamTokenKind = 'content' | 'reasoning'
 
+// DeepSeek v4（2026-07-24 起）：deepseek-chat / deepseek-reasoner 退役，统一为
+// deepseek-v4-flash，「深思」不再是独立模型名，而是请求参数 thinking.type。
+// 把升级前存过旧模型名的配置兜底映射到 v4，用户无需手动改配置即可继续使用。
+const RETIRED_MODELS: Record<string, string> = {
+  'deepseek-chat': DEFAULT_DEEPSEEK_MODEL,
+  'deepseek-reasoner': DEFAULT_DEEPSEEK_MODEL,
+}
+export function resolveModel(model: string): string {
+  return RETIRED_MODELS[model] ?? model
+}
+
 export interface AiChatDeps {
   apiKey: string
   model: string
   fetch: typeof fetch
   baseUrl?: string
+  /** 深思模式：true → thinking.type=enabled（流式回传 reasoning_content + content）；
+   *  缺省/false → thinking.type=disabled（仅 content）。对应旧版 deepseek-reasoner 与
+   *  deepseek-chat 的区别，可观察行为不变。 */
+  deepThink?: boolean
 }
 
 export function createAiChat(deps: AiChatDeps) {
   const url = `${deps.baseUrl ?? 'https://api.deepseek.com'}/chat/completions`
+  const model = resolveModel(deps.model)
+  // 两种模式都显式声明 thinking，不依赖服务端默认（v4 默认是否开启思考随文档而变）：
+  // 确保非深思路径（complete/普通流式）绝不被默认思考模式拖慢、绝不冒出 reasoning_content。
+  const thinking = { type: deps.deepThink ? 'enabled' : 'disabled' } as const
 
   async function complete(messages: ChatMessage[]): Promise<string> {
     const res = await deps.fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
-      body: JSON.stringify({ model: deps.model, messages, stream: false }),
+      body: JSON.stringify({ model, messages, stream: false, thinking }),
     })
     if (!res.ok) throw new Error(`DeepSeek request failed: ${res.status}`)
     const data = (await res.json()) as { choices: Array<{ message: { content: string } }> }
@@ -82,7 +102,7 @@ export function createAiChat(deps: AiChatDeps) {
       res = await deps.fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
-        body: JSON.stringify({ model: deps.model, messages, stream: true }),
+        body: JSON.stringify({ model, messages, stream: true, thinking }),
         signal,
       })
     } catch (err) {

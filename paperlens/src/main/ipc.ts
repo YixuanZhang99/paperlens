@@ -81,7 +81,7 @@ export function registerIpc(c: Container) {
     const { messages, truncated, usedChars, totalChars } = buildMessages({ paper: args.paper, paperText: args.paperText, history: args.history, userInput: args.input })
     currentAbort = new AbortController()
     try {
-      const text = await c.ai(args.deepThink ? 'deepseek-reasoner' : undefined)
+      const text = await c.ai({ deepThink: args.deepThink })
         .stream(messages, (delta, kind) => event.sender.send('chat:token', delta, kind), currentAbort.signal)
       return { text, truncated, usedChars, totalChars }
     } finally {

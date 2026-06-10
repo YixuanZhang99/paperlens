@@ -26,12 +26,16 @@ export const ChatMessageSchema = z.object({
 })
 export type ChatMessage = z.infer<typeof ChatMessageSchema>
 
+// DeepSeek 默认模型。v4（2026-07-24 起）deepseek-chat / deepseek-reasoner 退役，
+// 统一为 deepseek-v4-flash（思考模式由请求参数切换，不再是独立模型名）。
+export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash'
+
 export const AppConfigSchema = z.object({
   zoteroApiKey: z.string().default(''),
   zoteroUserId: z.string().default(''),
   zoteroDataDir: z.string().default(''),
   deepseekApiKey: z.string().default(''),
-  deepseekModel: z.string().default('deepseek-chat'),
+  deepseekModel: z.string().default(DEFAULT_DEEPSEEK_MODEL),
   notionToken: z.string().default(''),
   notionDatabaseId: z.string().default(''),
 })

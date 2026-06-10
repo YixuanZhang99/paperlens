@@ -47,7 +47,7 @@ export function createContainer() {
   // 工厂：按当前配置即时构造外部客户端（密钥可能随时被用户更新）
   const cfg = () => configStore.get()
   const zotero = () => createZoteroClient({ apiKey: cfg().zoteroApiKey, userId: cfg().zoteroUserId, fetch })
-  const ai = (model?: string) => createAiChat({ apiKey: cfg().deepseekApiKey, model: model ?? cfg().deepseekModel, fetch })
+  const ai = (opts?: { deepThink?: boolean }) => createAiChat({ apiKey: cfg().deepseekApiKey, model: cfg().deepseekModel, fetch, deepThink: opts?.deepThink })
   const notion = () => createNotionSync({ token: cfg().notionToken, databaseId: cfg().notionDatabaseId, fetch })
   const zoteroLocal = () => createZoteroLocal({
     dataDir: cfg().zoteroDataDir || join(os.homedir(), 'Zotero'),

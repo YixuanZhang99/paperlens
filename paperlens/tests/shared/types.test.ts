@@ -29,7 +29,7 @@ describe('shared schemas', () => {
   it('validates app config with empty defaults', () => {
     const c = AppConfigSchema.parse({})
     expect(c.zoteroUserId).toBe('')
-    expect(c.deepseekModel).toBe('deepseek-chat')
+    expect(c.deepseekModel).toBe('deepseek-v4-flash')
   })
 
   it('defaults zoteroDataDir to empty string', () => {

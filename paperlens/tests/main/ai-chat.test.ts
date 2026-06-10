@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createAiChat, buildMessages, buildFollowupMessages, parseFollowups } from '../../src/main/services/ai-chat'
+import { createAiChat, resolveModel, buildMessages, buildFollowupMessages, parseFollowups } from '../../src/main/services/ai-chat'
 import type { ChatMessage, Paper } from '@shared/types'
 
 const paper: Paper = {
@@ -98,7 +98,7 @@ describe('createAiChat.stream abort', () => {
       'data: {"choices":[{"delta":{"content":"部分"}}]}\n\n',
       'data: {"choices":[{"delta":{"content":"答案"}}]}\n\n',
     ], ac.signal)
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-chat', fetch })
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
     const tokens: string[] = []
     const full = await chat.stream([{ role: 'user', content: 'q' }], (d) => {
       tokens.push(d)
@@ -123,7 +123,7 @@ describe('createAiChat.stream abort', () => {
       })
       return new Response(stream, { status: 200 })
     })
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-chat', fetch })
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
     const full = await chat.stream([{ role: 'user', content: 'q' }], () => {}, ac.signal)
     expect(full).toBe('完整回答')
   })
@@ -143,7 +143,7 @@ describe('createAiChat.stream abort', () => {
       })
       return new Response(stream, { status: 200 })
     })
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-chat', fetch })
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
     await expect(chat.stream([{ role: 'user', content: 'q' }], () => {})).rejects.toThrow(/socket hang up/)
   })
 })
@@ -155,7 +155,7 @@ describe('createAiChat.complete', () => {
         choices: [{ message: { role: 'assistant', content: '这篇论文提出了Transformer。' } }],
       }), { status: 200 })
     )
-    const chat = createAiChat({ apiKey: 'sk-x', model: 'deepseek-chat', fetch })
+    const chat = createAiChat({ apiKey: 'sk-x', model: 'deepseek-v4-flash', fetch })
     const msgs: ChatMessage[] = [{ role: 'user', content: 'hi' }]
     const reply = await chat.complete(msgs)
 
@@ -163,7 +163,8 @@ describe('createAiChat.complete', () => {
     expect(url).toBe('https://api.deepseek.com/chat/completions')
     expect((init!.headers as any)['Authorization']).toBe('Bearer sk-x')
     const body = JSON.parse(init!.body as string)
-    expect(body.model).toBe('deepseek-chat')
+    expect(body.model).toBe('deepseek-v4-flash')
+    expect(body.thinking).toEqual({ type: 'disabled' }) // complete 永远非深思
     expect(body.messages).toEqual(msgs)
     expect(reply).toBe('这篇论文提出了Transformer。')
   })
@@ -171,7 +172,7 @@ describe('createAiChat.complete', () => {
   it('throws on non-200', async () => {
     const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       new Response('nope', { status: 401 }))
-    const chat = createAiChat({ apiKey: 'bad', model: 'deepseek-chat', fetch })
+    const chat = createAiChat({ apiKey: 'bad', model: 'deepseek-v4-flash', fetch })
     await expect(chat.complete([{ role: 'user', content: 'x' }])).rejects.toThrow(/DeepSeek.*401/)
   })
 })
@@ -218,5 +219,27 @@ describe('parseFollowups', () => {
     expect(parseFollowups('{"a":1}')).toEqual([])
     expect(parseFollowups('[broken json')).toEqual([])
     expect(parseFollowups('')).toEqual([])
+  })
+})
+
+describe('resolveModel — 退役模型名兼容（旧配置无需手改）', () => {
+  it('maps retired deepseek-chat / deepseek-reasoner → deepseek-v4-flash', () => {
+    expect(resolveModel('deepseek-chat')).toBe('deepseek-v4-flash')
+    expect(resolveModel('deepseek-reasoner')).toBe('deepseek-v4-flash')
+  })
+
+  it('leaves the current name and any unknown/custom name untouched', () => {
+    expect(resolveModel('deepseek-v4-flash')).toBe('deepseek-v4-flash')
+    expect(resolveModel('deepseek-v4-pro')).toBe('deepseek-v4-pro')
+    expect(resolveModel('my-custom-model')).toBe('my-custom-model')
+  })
+
+  it('a config still holding a retired name issues the request as deepseek-v4-flash', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), { status: 200 }))
+    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-reasoner', fetch }) // 旧配置遗留值
+    await chat.complete([{ role: 'user', content: 'x' }])
+    const body = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string)
+    expect(body.model).toBe('deepseek-v4-flash')
   })
 })
