@@ -1,20 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Note } from '@shared/types'
+import type { ChatMessage, Note } from '@shared/types'
 import { Markdown } from './Markdown'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
-type Source = { paperKey: string; title: string }
+
+// 与 preload kbAsk 返回结构一致（chunks 为命中原文片段，支撑「信任链」展示）
+type KbSource = { paperKey: string; paperTitle: string; chunks: string[] }
+type KbTurn = { q: string; a: string; sources: KbSource[] }
+
+function loadTurns(): KbTurn[] {
+  try { return JSON.parse(localStorage.getItem('pl.kb.turns') || '[]') } catch { return [] }
+}
 
 export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string) => void }) {
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
-  const [answer, setAnswer] = useState('')
-  const [sources, setSources] = useState<Source[]>([])
+  const [turns, setTurns] = useState<KbTurn[]>(loadTurns)
+  const [pending, setPending] = useState<{ q: string; a: string } | null>(null)
+  const [expanded, setExpanded] = useState<{ t: number; s: number } | null>(null)
+  const [savedTurns, setSavedTurns] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'notes' | 'index'>('notes')
+  const [tab, setTabState] = useState<'notes' | 'index'>(() =>
+    localStorage.getItem('pl.kb.tab') === 'index' ? 'index' : 'notes')
   const [notes, setNotes] = useState<Note[]>([])
-  const [keyword, setKeyword] = useState('')
-  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [paperTitles, setPaperTitles] = useState<Map<string, string>>(new Map())
+  const [keyword, setKeyword] = useState(() => localStorage.getItem('pl.kb.keyword') ?? '')
+  const [activeTag, setActiveTag] = useState<string | null>(() => localStorage.getItem('pl.kb.tag') || null)
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
   const [status, setStatus] = useState<{ indexedPapers: number; totalPapers: number; totalChunks: number } | null>(null)
   const [indexing, setIndexing] = useState(false)
   const [progress, setProgress] = useState('')
@@ -22,9 +34,33 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
   useEffect(() => {
     window.api.listAllNotes().then(setNotes).catch(() => {})
     window.api.kbStatus().then(setStatus).catch(() => {})
+    window.api.listPapers().catch(() => [])
+      .then(ps => setPaperTitles(new Map(ps.map(p => [p.key, p.title]))))
     runIndex() // 打开即后台增量索引（已索引的论文会秒过）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 对话线程持久化（最多 20 轮）
+  useEffect(() => {
+    localStorage.setItem('pl.kb.turns', JSON.stringify(turns.slice(-20)))
+  }, [turns])
+
+  // 笔记筛选状态持久化：跳走再回来不丢
+  useEffect(() => { localStorage.setItem('pl.kb.tab', tab) }, [tab])
+  useEffect(() => { localStorage.setItem('pl.kb.keyword', keyword) }, [keyword])
+  useEffect(() => {
+    if (activeTag) localStorage.setItem('pl.kb.tag', activeTag)
+    else localStorage.removeItem('pl.kb.tag')
+  }, [activeTag])
+
+  // 「确认删除？」3 秒或点击其他地方自动复位
+  useEffect(() => {
+    if (!confirmDel) return
+    const timer = setTimeout(() => setConfirmDel(null), 3000)
+    const reset = () => setConfirmDel(null)
+    document.addEventListener('click', reset)
+    return () => { clearTimeout(timer); document.removeEventListener('click', reset) }
+  }, [confirmDel])
 
   async function runIndex() {
     setIndexing(true)
@@ -39,15 +75,59 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
   async function ask() {
     const q = question.trim()
     if (!q || asking) return
-    setError(null); setAnswer(''); setSources([]); setAsking(true)
+    setError(null)
+    // 最近 3 轮作为对话历史，支撑追问指代
+    const history: ChatMessage[] = turns.slice(-3).flatMap(t => [
+      { role: 'user' as const, content: t.q },
+      { role: 'assistant' as const, content: t.a },
+    ])
+    setQuestion('')
+    setPending({ q, a: '' })
+    setAsking(true)
     try {
-      const r = await window.api.kbAsk(q, (delta, kind) => {
-        if (kind !== 'reasoning') setAnswer(a => a + delta)
+      const r = await window.api.kbAsk({ question: q, history }, (delta, kind) => {
+        if (kind !== 'reasoning') setPending(p => (p ? { ...p, a: p.a + delta } : p))
       })
-      setSources(r.sources)
+      setTurns(ts => [...ts, { q, a: r.answer, sources: r.sources }])
     } catch (e) {
       setError('问答失败：' + errMsg(e))
-    } finally { setAsking(false) }
+    } finally { setAsking(false); setPending(null) }
+  }
+
+  function clearThread() {
+    setTurns([])
+    setExpanded(null)
+    setSavedTurns(new Set())
+    localStorage.removeItem('pl.kb.turns')
+  }
+
+  async function saveTurnAsNote(idx: number) {
+    const t = turns[idx]
+    if (!t || t.sources.length === 0 || savedTurns.has(idx)) return
+    const content =
+      `## 全库问答\n\n**问**：${t.q}\n\n${t.a}\n\n**来源**：\n` +
+      t.sources.map((s, i) => `${i + 1}. ${s.paperTitle}`).join('\n')
+    try {
+      await window.api.addNote({ paperKey: t.sources[0].paperKey, content, tags: [], autoTag: true })
+      setSavedTurns(prev => new Set(prev).add(idx))
+      window.api.listAllNotes().then(setNotes).catch(() => {})
+    } catch (e) {
+      setError('存为笔记失败：' + errMsg(e))
+    }
+  }
+
+  async function deleteNote(id: string) {
+    try {
+      await window.api.deleteNote(id)
+      setNotes(await window.api.listAllNotes())
+    } catch (e) {
+      setError('删除失败：' + errMsg(e))
+    }
+  }
+
+  function switchTab(t: 'notes' | 'index') {
+    setTabState(t)
+    setError(null)
   }
 
   const allTags = useMemo(() => [...new Set(notes.flatMap(n => n.tags))], [notes])
@@ -58,33 +138,75 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
   return (
     <div className="kb">
       <h2 className="kb-title">🧠 知识库</h2>
-      {error && <div role="alert" className="alert-banner">{error}</div>}
-      <div className="kb-ask">
-        <div className="input-row">
-          <input
-            placeholder="向整个论文库提问，例如：哪些论文讨论了 RLHF？各自怎么做的？"
-            value={question} onChange={e => setQuestion(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') ask() }} />
-          <button className="btn-primary" onClick={ask} disabled={asking}>提问</button>
+      {error && (
+        <div role="alert" className="alert-banner">
+          {error}
+          <button className="kb-alert-close" aria-label="关闭错误提示" onClick={() => setError(null)}>×</button>
         </div>
-        {(answer || asking) && (
-          <div className="kb-answer">
-            {answer ? <Markdown>{answer}</Markdown> : '检索并思考中…'}
-            {sources.length > 0 && (
-              <div className="kb-sources">
-                {sources.map((s, i) => (
-                  <button key={s.paperKey} className="chip" onClick={() => onOpenPaper(s.paperKey)}>
-                    [来源{i + 1}] {s.title}
-                  </button>
-                ))}
+      )}
+      <div className="kb-ask">
+        {(turns.length > 0 || pending) && (
+          <div className="kb-thread-head">
+            <button className="btn-ghost" onClick={clearThread}>清空对话</button>
+          </div>
+        )}
+        {(turns.length > 0 || pending) && (
+          <div className="kb-thread">
+            {turns.map((t, ti) => (
+              <div key={ti} className="kb-turn">
+                <div className="kb-q">{t.q}</div>
+                <div className="kb-a"><Markdown>{t.a}</Markdown></div>
+                {t.sources.length > 0 && (
+                  <>
+                    <div className="kb-sources">
+                      {t.sources.map((s, si) => (
+                        <button
+                          key={s.paperKey}
+                          className={'chip' + (expanded?.t === ti && expanded.s === si ? ' chip-active' : '')}
+                          onClick={() => setExpanded(expanded?.t === ti && expanded.s === si ? null : { t: ti, s: si })}>
+                          [来源{si + 1}] {s.paperTitle}
+                        </button>
+                      ))}
+                      <button
+                        className="chip kb-save-note"
+                        disabled={savedTurns.has(ti)}
+                        onClick={() => saveTurnAsNote(ti)}>
+                        {savedTurns.has(ti) ? '✓ 已存为笔记' : '存为笔记'}
+                      </button>
+                    </div>
+                    {expanded?.t === ti && t.sources[expanded.s] && (
+                      <div className="kb-source-panel">
+                        {t.sources[expanded.s].chunks.map((c, ci) => (
+                          <blockquote key={ci} className="kb-quote">{c}</blockquote>
+                        ))}
+                        <button onClick={() => onOpenPaper(t.sources[expanded.s].paperKey)}>打开论文 →</button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+            {pending && (
+              <div className="kb-turn">
+                <div className="kb-q">{pending.q}</div>
+                <div className="kb-a">
+                  {pending.a ? <Markdown>{pending.a}</Markdown> : '检索并思考中…'}
+                </div>
               </div>
             )}
           </div>
         )}
+        <div className="input-row">
+          <input
+            placeholder="向整个论文库提问，例如：哪些论文讨论了 RLHF？各自怎么做的？"
+            value={question} onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) ask() }} />
+          <button className="btn-primary" onClick={ask} disabled={asking}>提问</button>
+        </div>
       </div>
       <div className="reader-tabs" style={{ marginTop: 14 }}>
-        <button onClick={() => setTab('notes')} disabled={tab === 'notes'}>📝 我的笔记</button>
-        <button onClick={() => setTab('index')} disabled={tab === 'index'}>📄 索引状态</button>
+        <button onClick={() => switchTab('notes')} disabled={tab === 'notes'}>📝 我的笔记</button>
+        <button onClick={() => switchTab('index')} disabled={tab === 'index'}>📄 索引状态</button>
       </div>
       {tab === 'notes' ? (
         <div className="kb-notes">
@@ -100,11 +222,27 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
           {filtered.length === 0 && <p className="empty-hint">没有匹配的笔记。</p>}
           <ul className="note-list">
             {filtered.map(n => (
-              <li key={n.id} className="note-card kb-note" onClick={() => onOpenPaper(n.paperKey)}>
-                <div><Markdown>{n.content}</Markdown></div>
-                {n.tags.length > 0 && (
-                  <div className="note-tags">{n.tags.map(t => <span key={t} className="tag-chip">{t}</span>)}</div>
-                )}
+              <li key={n.id} className="note-card kb-note">
+                <div className="kb-note-meta">
+                  <span>{paperTitles.get(n.paperKey) ?? n.paperKey}</span>
+                  <span>{new Date(n.createdAt).toLocaleDateString()}</span>
+                </div>
+                <div className="kb-note-body"><Markdown>{n.content}</Markdown></div>
+                <div className="kb-note-foot">
+                  {n.tags.length > 0 && (
+                    <div className="note-tags">{n.tags.map(t => <span key={t} className="tag-chip">{t}</span>)}</div>
+                  )}
+                  <button onClick={e => { e.stopPropagation(); onOpenPaper(n.paperKey) }}>打开论文 →</button>
+                  <button
+                    className={confirmDel === n.id ? 'btn-danger' : ''}
+                    onClick={e => {
+                      e.stopPropagation()
+                      if (confirmDel === n.id) { setConfirmDel(null); deleteNote(n.id) }
+                      else setConfirmDel(n.id)
+                    }}>
+                    {confirmDel === n.id ? '确认删除？' : '删除'}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

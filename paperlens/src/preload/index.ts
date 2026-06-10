@@ -40,13 +40,14 @@ const api = {
     return ipcRenderer.invoke('kb:index').finally(() => ipcRenderer.removeListener('kb:progress', listener))
   },
   kbAsk: (
-    question: string,
+    args: { question: string; history: ChatMessage[] },
     onToken: (delta: string, kind: 'content' | 'reasoning') => void,
-  ): Promise<{ answer: string; sources: Array<{ paperKey: string; title: string }> }> => {
+  ): Promise<{ answer: string; sources: Array<{ paperKey: string; paperTitle: string; chunks: string[] }> }> => {
     const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
     ipcRenderer.on('kb:token', listener)
-    return ipcRenderer.invoke('kb:ask', question).finally(() => ipcRenderer.removeListener('kb:token', listener))
+    return ipcRenderer.invoke('kb:ask', args).finally(() => ipcRenderer.removeListener('kb:token', listener))
   },
+  deleteNote: (id: string): Promise<void> => ipcRenderer.invoke('notes:delete', id),
 }
 
 contextBridge.exposeInMainWorld('api', api)

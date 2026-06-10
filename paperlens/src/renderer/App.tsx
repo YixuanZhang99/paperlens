@@ -23,6 +23,11 @@ export function App() {
   const [navOpen, setNavOpen] = useState(() => localStorage.getItem('pl.navOpen') !== '0')
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem('pl.chatOpen') !== '0')
 
+  // 启动静默增量索引：知识库「永远是新的」（失败忽略，不打扰用户）
+  useEffect(() => {
+    window.api.kbIndex(() => {}).catch(() => {})
+  }, [])
+
   useEffect(() => {
     localStorage.setItem('pl.navW', String(navW))
     localStorage.setItem('pl.chatW', String(chatW))

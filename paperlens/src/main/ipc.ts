@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags } from './services/ai-chat'
-import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, insertChunks, searchChunks, kbStatus, indexedPaperKeys } from './services/kb'
+import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys } from './services/kb'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
 function toArrayBuffer(u: Uint8Array): ArrayBuffer {
@@ -97,6 +97,8 @@ export function registerIpc(c: Container) {
 
   ipcMain.handle('notes:listAll', () => c.notesRepo.listAll())
 
+  ipcMain.handle('notes:delete', (_e, id: string) => c.notesRepo.remove(id))
+
   ipcMain.handle('kb:status', async () => {
     const total = (await c.zotero().listPapers()).length
     return { ...kbStatus(c.db), totalPapers: total }
@@ -120,17 +122,34 @@ export function registerIpc(c: Container) {
     return { indexed, skipped, ...kbStatus(c.db) }
   })
 
-  ipcMain.handle('kb:ask', async (event, question: string) => {
+  ipcMain.handle('kb:ask', async (event, args: { question: string; history: ChatMessage[] }) => {
+    // 1) 查询扩写（带对话历史可解析「它」「这种方法」等指代）；失败回退原问题
     let terms: string[] = []
-    try { terms = parseQueryTerms(await c.ai().complete(buildQueryExpansionMessages(question))) } catch { /* 扩写失败回退 */ }
-    if (terms.length === 0) terms = [question]
-    const hits = searchChunks(c.db, terms)
-    if (hits.length === 0) throw new Error('知识库中没有检索到相关内容，请先更新索引或换个问法')
-    const messages = buildKbAnswerMessages(question, hits.map(h => ({ paperTitle: h.paperTitle, text: h.text })))
-    const answer = await c.ai().stream(messages, (delta, kind) => event.sender.send('kb:token', delta, kind))
-    const seen = new Set<string>()
-    const sources = hits.filter(h => !seen.has(h.paperKey) && seen.add(h.paperKey))
-      .map(h => ({ paperKey: h.paperKey, title: h.paperTitle }))
+    try { terms = parseQueryTerms(await c.ai().complete(buildQueryExpansionMessages(args.question, args.history))) } catch { /* 扩写失败回退 */ }
+    if (terms.length === 0) terms = [args.question]
+    // 2) 宽召回 24 条，留给 rerank 挑
+    let hits = searchChunks(c.db, terms, 24)
+    // 3) 无命中：优雅返回，不抛错
+    if (hits.length === 0) {
+      return { answer: '知识库中没有检索到与这个问题相关的内容。可以换个问法，或到「索引状态」里更新索引后再试。', sources: [] }
+    }
+    // 4) 命中多时 LLM rerank：按分数降序稳定排序（同分保持检索原序）；失败直接取前 8
+    if (hits.length > 8) {
+      try {
+        const scores = parseRerankScores(await c.ai().complete(buildRerankMessages(args.question, hits)), hits.length)
+        if (scores) {
+          hits = hits
+            .map((h, i) => ({ h, i, s: scores[i] }))
+            .sort((a, b) => b.s - a.s || a.i - b.i)
+            .map(x => x.h)
+        }
+      } catch { /* rerank 失败 → 保持 bm25 排序 */ }
+    }
+    // 5) 按论文聚合来源（chips 顺序即 [来源N] 编号，含 chunks 原文供前端展示）
+    const sources = groupHitsToSources(hits.slice(0, 8))
+    const answer = await c.ai().stream(
+      buildKbAnswerMessages(args.question, sources, args.history),
+      (delta, kind) => event.sender.send('kb:token', delta, kind))
     return { answer, sources }
   })
 

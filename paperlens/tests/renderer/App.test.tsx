@@ -59,6 +59,11 @@ describe('App', () => {
     expect(await screen.findByText('请选择一篇论文开始对话')).toBeInTheDocument()
   })
 
+  it('kicks off a silent incremental kb index on mount', async () => {
+    render(<App />)
+    await waitFor(() => expect((window as any).api.kbIndex).toHaveBeenCalled())
+  })
+
   it('opens the knowledge base overlay and closes it with Escape', async () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: /知识库/ }))
