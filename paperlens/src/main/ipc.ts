@@ -94,6 +94,7 @@ export function registerIpc(c: Container) {
   ipcMain.handle('chat:history', (_e, paperKey: string) => c.chatRepo.listByPaper(paperKey))
   ipcMain.handle('chat:append', (_e, m: { paperKey: string; role: 'user' | 'assistant'; content: string; reasoning?: string | null }) => c.chatRepo.append(m))
   ipcMain.handle('chat:clear', (_e, paperKey: string) => c.chatRepo.clearByPaper(paperKey))
+  ipcMain.handle('chat:replace', (_e, a: { paperKey: string; messages: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string | null }> }) => c.chatRepo.replaceAll(a.paperKey, a.messages))
 
   ipcMain.handle('chat:followups', async (_e, a: { paperTitle: string; lastAnswer: string }) => {
     try {

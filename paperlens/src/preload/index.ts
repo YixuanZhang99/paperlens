@@ -25,6 +25,7 @@ const api = {
   loadChat: (paperKey: string): Promise<ChatRecord[]> => ipcRenderer.invoke('chat:history', paperKey),
   appendChat: (m: { paperKey: string; role: 'user' | 'assistant'; content: string; reasoning?: string | null }): Promise<ChatRecord> => ipcRenderer.invoke('chat:append', m),
   clearChat: (paperKey: string): Promise<void> => ipcRenderer.invoke('chat:clear', paperKey),
+  replaceChat: (paperKey: string, messages: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string | null }>): Promise<void> => ipcRenderer.invoke('chat:replace', { paperKey, messages }),
   getFollowups: (a: { paperTitle: string; lastAnswer: string }): Promise<string[]> => ipcRenderer.invoke('chat:followups', a),
   addNote: (n: { paperKey: string; content: string; tags: string[]; autoTag?: boolean }): Promise<Note> =>
     ipcRenderer.invoke('notes:add', n),

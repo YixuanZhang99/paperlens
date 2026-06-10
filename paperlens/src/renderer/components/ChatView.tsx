@@ -43,20 +43,22 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
     setFollowups([])
     paperText.current = ''
     if (!paper) return
-    const key = paper.key
+    // 竞态守卫：切到别的论文后，本次的异步结果不得再写入（cleanup 置 cancelled）
+    let cancelled = false
     window.api.loadChat(paper.key).then(records => {
-      if (paper?.key === key) {
+      if (!cancelled) {
         setHistory(records.map(r => ({ role: r.role, content: r.content, reasoning: r.reasoning ?? undefined })))
       }
     }).catch(() => { /* ignore */ })
     window.api.getPaperText(paper).then(t => {
-      if (paper?.key === key) {
+      if (!cancelled) {
         paperText.current = t
         setTextReady(true)
       }
     }).catch(() => {
-      if (paper?.key === key) setTextReady(true)
+      if (!cancelled) setTextReady(true)
     })
+    return () => { cancelled = true }
   }, [paper?.key])
 
   const send = useCallback(async (text?: string) => {
@@ -167,11 +169,15 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
       )
       setLastStream(result)
       const finalContent = result.text || assistantContent
-      await window.api.appendChat({
-        paperKey: paper.key, role: 'assistant',
-        content: finalContent,
-        reasoning: assistantReasoning || null,
-      }).catch(() => { /* ignore */ })
+      // 重新生成必须丢弃旧回答及其后的持久化记录，否则切回论文时旧回答会复现。
+      // 用 priorHistory + 新回答整体重写该论文，保证 DB 与 UI 一致。
+      const persisted = [
+        ...priorHistory
+          .filter((m): m is Bubble & { role: 'user' | 'assistant' } => m.role !== 'system')
+          .map(m => ({ role: m.role, content: m.content, reasoning: m.reasoning ?? null })),
+        { role: 'assistant' as const, content: finalContent, reasoning: assistantReasoning || null },
+      ]
+      await window.api.replaceChat(paper.key, persisted).catch(() => { /* ignore */ })
       window.api.getFollowups({ paperTitle: paper.title, lastAnswer: finalContent })
         .then(fups => setFollowups(fups))
         .catch(() => setFollowups([]))

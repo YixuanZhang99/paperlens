@@ -15,6 +15,7 @@ function makeApi(overrides: Record<string, unknown> = {}) {
     loadChat: vi.fn(async () => []),
     appendChat: vi.fn(async () => ({ id: 1, paperKey: 'P1', role: 'user', content: '', reasoning: null, createdAt: 0 })),
     clearChat: vi.fn(async () => {}),
+    replaceChat: vi.fn(async () => {}),
     getFollowups: vi.fn(async () => []),
     addNote: vi.fn(async () => ({})),
     ...overrides,
@@ -270,6 +271,51 @@ describe('ChatView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /重新生成/ }))
     await waitFor(() => expect(streamChat).toHaveBeenCalledTimes(2))
+  })
+
+  // Critical 回归：重新生成必须用 replaceChat 整体重写（丢弃旧回答），而非追加
+  it('persists regeneration via replaceChat so the stale answer cannot resurface', async () => {
+    const replaceChat = vi.fn(async () => {})
+    let n = 0
+    const streamChat = vi.fn(async (_a: any, onToken: any) => {
+      n += 1
+      const text = n === 1 ? '旧答案' : '新答案'
+      onToken(text, 'content')
+      return { text, truncated: false, usedChars: 10, totalChars: 10 }
+    })
+    ;(window as any).api = makeApi({ streamChat, replaceChat })
+    render(<ChatView paper={paper} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: '问题' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    await screen.findByText('旧答案')
+
+    fireEvent.click(screen.getByRole('button', { name: /重新生成/ }))
+    await screen.findByText('新答案')
+    // replaceChat 收到的最终消息只含 user + 新答案，绝不含旧答案
+    await waitFor(() => expect(replaceChat).toHaveBeenCalled())
+    const lastCall = replaceChat.mock.calls.at(-1) as unknown as [string, Array<{ role: string; content: string }>]
+    const msgs = lastCall[1]
+    expect(msgs.some(m => m.content === '旧答案')).toBe(false)
+    expect(msgs.some(m => m.role === 'user' && m.content === '问题')).toBe(true)
+    expect(msgs.some(m => m.role === 'assistant' && m.content === '新答案')).toBe(true)
+  })
+
+  // I2 回归：切到另一篇论文时，旧对话清空并按新 key 重新加载
+  it('clears old history and reloads when switching papers', async () => {
+    const loadChat = vi.fn(async (key: string) =>
+      key === 'P1'
+        ? [{ id: 1, paperKey: 'P1', role: 'user' as const, content: '论文一的提问', reasoning: null, createdAt: 1 }]
+        : [{ id: 2, paperKey: 'P2', role: 'user' as const, content: '论文二的提问', reasoning: null, createdAt: 1 }])
+    ;(window as any).api = makeApi({ loadChat })
+    const { rerender } = render(<ChatView paper={paper} />)
+    expect(await screen.findByText('论文一的提问')).toBeInTheDocument()
+
+    const paper2 = { key: 'P2', title: 'T2', authors: ['B'], year: 2021, abstract: '', attachmentKey: null }
+    rerender(<ChatView paper={paper2} />)
+    await waitFor(() => expect(loadChat).toHaveBeenCalledWith('P2'))
+    expect(await screen.findByText('论文二的提问')).toBeInTheDocument()
+    expect(screen.queryByText('论文一的提问')).not.toBeInTheDocument()
   })
 
   // P0: 「清空对话」调 clearChat

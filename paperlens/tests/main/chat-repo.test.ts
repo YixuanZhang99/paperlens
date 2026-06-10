@@ -58,4 +58,29 @@ describe('ChatRepo', () => {
     expect(r.listByPaper('P1')).toEqual([])
     expect(r.listByPaper('P2')).toHaveLength(1)
   })
+
+  it('replaceAll discards old records and writes the given messages atomically', () => {
+    const r = repo()
+    r.append({ paperKey: 'P1', role: 'user', content: '问1' })
+    r.append({ paperKey: 'P1', role: 'assistant', content: '旧答' })
+    r.append({ paperKey: 'P2', role: 'user', content: '别动我' })
+    r.replaceAll('P1', [
+      { role: 'user', content: '问1' },
+      { role: 'assistant', content: '新答', reasoning: '重想了一遍' },
+    ])
+    const list = r.listByPaper('P1')
+    expect(list.map(m => m.content)).toEqual(['问1', '新答'])
+    expect(list[1].reasoning).toBe('重想了一遍')
+    expect(list[0].reasoning).toBeNull()
+    // 旧的「旧答」不复现，且不影响其他论文
+    expect(list.some(m => m.content === '旧答')).toBe(false)
+    expect(r.listByPaper('P2')).toHaveLength(1)
+  })
+
+  it('replaceAll with [] empties a paper', () => {
+    const r = repo()
+    r.append({ paperKey: 'P1', role: 'user', content: 'x' })
+    r.replaceAll('P1', [])
+    expect(r.listByPaper('P1')).toEqual([])
+  })
 })

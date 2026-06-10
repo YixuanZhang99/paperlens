@@ -47,5 +47,24 @@ export function createChatRepo(db: DatabaseType.Database, now: () => number = ()
     db.prepare('DELETE FROM chat_messages WHERE paper_key = ?').run(paperKey)
   }
 
-  return { append, listByPaper, clearByPaper }
+  // 用给定消息整体替换某论文的对话（事务内先清后写）。
+  // 「重新生成」需要丢弃旧回答及其后的全部记录，单条 append 做不到，故整体重写。
+  function replaceAll(
+    paperKey: string,
+    messages: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string | null }>,
+  ): void {
+    const ins = db.prepare(
+      `INSERT INTO chat_messages (paper_key, role, content, reasoning, created_at)
+       VALUES (@paperKey, @role, @content, @reasoning, @createdAt)`
+    )
+    const tx = db.transaction((ms: typeof messages) => {
+      db.prepare('DELETE FROM chat_messages WHERE paper_key = ?').run(paperKey)
+      for (const m of ms) {
+        ins.run({ paperKey, role: m.role, content: m.content, reasoning: m.reasoning ?? null, createdAt: now() })
+      }
+    })
+    tx(messages)
+  }
+
+  return { append, listByPaper, clearByPaper, replaceAll }
 }
