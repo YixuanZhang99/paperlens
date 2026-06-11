@@ -217,6 +217,21 @@ app.whenReady().then(async () => {
   }
   await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true`)
   ok('knowledge-base', `indexed/total/chunks: ${kbStat}`)
+
+  // ── 11. 引用定位：对话回答标 [页N] → 点击 chip → 阅读区跳 PDF（仅 DRIVE_CITE，花少量费用）──
+  if (process.env.DRIVE_CITE) {
+    await js(`document.querySelectorAll('nav .paper-item')[0].click(); return true`)
+    await waitFor('chat ready', `const s=[...document.querySelectorAll('section[aria-label="对话"] button')].find(b=>b.textContent.trim()==='发送'); return s && !s.disabled`, 30000, 1000)
+    await js(`const t=document.querySelector('section[aria-label="对话"] .chat-textarea'); const s=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set; s.call(t,'请引用具体页码，简述论文第二页前后的内容。'); t.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+    await js(`[...document.querySelectorAll('section[aria-label="对话"] button')].find(b=>b.textContent.trim()==='发送').click(); return true`)
+    await waitFor('cite answered', `const s=[...document.querySelectorAll('section[aria-label="对话"] button')].find(b=>b.textContent.trim()==='发送'); const b=document.querySelector('section[aria-label="对话"] .bubble.assistant'); return s && !s.disabled && b && b.textContent.length>20`, 120000, 1500)
+    const nCite = await js(`return document.querySelectorAll('.page-cite').length`)
+    if (nCite) {
+      await js(`document.querySelector('.page-cite').click(); return true`)
+      await waitFor('pdf jumped', `return !!document.querySelector('section[aria-label="阅读"] .pdf-stage canvas')`, 30000, 1000)
+      await shot('15-citation-jump.png'); ok('citation-jump', `[页N] chips=${nCite} → PDF 跳转`)
+    } else { await shot('15-citation-jump.png'); ok('citation-jump', 'AI 本轮未标页码（可接受降级）') }
+  }
   } catch (e) {
     fail('driver', e && e.message)
     try { await shot('99-failure.png') } catch {}

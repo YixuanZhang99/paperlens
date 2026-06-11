@@ -472,3 +472,17 @@ input::placeholder { color: var(--text-3); }
   text-align: center; padding: 40px 20px;
   line-height: 1.8;
 }
+
+/* ─── 引用定位（[页N] chip + 跳页高亮）──────────────────────── */
+.page-cite {
+  display: inline; padding: 0 5px; margin: 0 1px;
+  font-size: 12px; line-height: 1.4;
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--accent-border); border-radius: 4px; cursor: pointer;
+}
+.page-cite:hover { background: #e2e6fd; }
+.page-flash { animation: pageFlash 1.5s ease-out; }
+@keyframes pageFlash {
+  0%, 40% { box-shadow: 0 0 0 3px var(--accent), 0 1px 4px rgba(0,0,0,.2); }
+  100% { box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+}
