@@ -511,3 +511,6 @@ input::placeholder { color: var(--text-3); }
 .pdf-search-count { font-size: 11px; color: var(--text-3); min-width: 38px; text-align: center; }
 .textLayer span.search-hit { background: rgba(250, 204, 21, .45); }
 .textLayer span.search-hit-active { background: rgba(249, 115, 22, .6); }
+
+/* 句级高亮：引用定位命中的原文 spans（黄底 3 秒渐隐由 JS 移除类完成） */
+.textLayer span.sentence-flash { background: rgba(250, 204, 21, .55); }
