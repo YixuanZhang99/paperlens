@@ -84,4 +84,14 @@ describe('ReaderView', () => {
     expect(await screen.findByText('新笔记')).toBeInTheDocument()
     expect(listNotes).toHaveBeenCalledTimes(2)
   })
+
+  it('switches to PDF tab and loads pdf when a jumpTarget for this paper arrives', async () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn()
+    const getPaperPdf = vi.fn(async () => new ArrayBuffer(8))
+    ;(window as any).api = { ...(window as any).api, getPaperPdf, listNotes: vi.fn(async () => []) }
+    const paper = { key: 'P1', title: 'T', authors: [], year: 2020, abstract: '', attachmentKey: null }
+    const { rerender } = render(<ReaderView paper={paper} jumpTarget={null} />)
+    rerender(<ReaderView paper={paper} jumpTarget={{ paperKey: 'P1', page: 2, nonce: 1 }} />)
+    await waitFor(() => expect(getPaperPdf).toHaveBeenCalled())
+  })
 })

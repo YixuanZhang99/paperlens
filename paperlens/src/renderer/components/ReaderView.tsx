@@ -5,7 +5,11 @@ import { Markdown } from './Markdown'
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export function ReaderView({ paper, notesVersion = 0 }: { paper: Paper | null; notesVersion?: number }) {
+export function ReaderView({ paper, notesVersion = 0, jumpTarget = null }: {
+  paper: Paper | null
+  notesVersion?: number
+  jumpTarget?: { paperKey: string; page: number; nonce: number } | null
+}) {
   const [notes, setNotes] = useState<Note[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
   const [tab, setTab] = useState<'summary' | 'pdf'>('summary')
@@ -26,6 +30,27 @@ export function ReaderView({ paper, notesVersion = 0 }: { paper: Paper | null; n
     if (paper) window.api.listNotes(paper.key).then(setNotes)
     else setNotes([])
   }, [paper?.key, notesVersion])
+
+  useEffect(() => {
+    if (!jumpTarget || !paper || jumpTarget.paperKey !== paper.key) return
+    let cancelled = false
+    ;(async () => {
+      if (tab !== 'pdf' || pdfData === null) await openPdf()
+      for (let i = 0; i < 80 && !cancelled; i++) {
+        const canvases = document.querySelectorAll('.pdf-stage canvas')
+        if (canvases.length >= jumpTarget.page) {
+          const el = canvases[jumpTarget.page - 1] as HTMLElement
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          el.classList.add('page-flash')
+          setTimeout(() => el.classList.remove('page-flash'), 1500)
+          return
+        }
+        await new Promise(r => setTimeout(r, 200))
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTarget?.nonce])
 
   if (!paper) return <div className="placeholder-pane">从左侧选择论文</div>
 
