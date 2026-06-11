@@ -17,7 +17,7 @@ type Bubble = ChatMessage & { reasoning?: string }
 
 type StreamResult = { text: string; truncated: boolean; usedChars: number; totalChars: number }
 
-export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSaved?: () => void }) {
+export function ChatView({ paper, onNoteSaved, onPageJump }: { paper: Paper | null; onNoteSaved?: () => void; onPageJump?: (page: number) => void }) {
   const [history, setHistory] = useState<Bubble[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -55,7 +55,7 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
         setHistory(records.map(r => ({ role: r.role, content: r.content, reasoning: r.reasoning ?? undefined })))
       }
     }).catch(() => { /* ignore */ })
-    window.api.getPaperText(paper).then(t => {
+    window.api.getPaperTextPaged(paper).then(t => {
       if (!cancelled) {
         paperText.current = t
         setTextReady(true)
@@ -231,7 +231,7 @@ export function ChatView({ paper, onNoteSaved }: { paper: Paper | null; onNoteSa
             )}
             {m.role === 'assistant' ? (
               <div className="bubble assistant bubble-wrap">
-                {m.content ? <Markdown>{m.content}</Markdown> : (busy && i === history.length - 1 ? '…' : '')}
+                {m.content ? <Markdown onPageJump={onPageJump}>{m.content}</Markdown> : (busy && i === history.length - 1 ? '…' : '')}
                 <div className="bubble-ops">
                   <button
                     className="btn-ghost bubble-op-btn"

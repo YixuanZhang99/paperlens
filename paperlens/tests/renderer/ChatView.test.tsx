@@ -7,6 +7,7 @@ const paper = { key: 'P1', title: 'T', authors: ['A'], year: 2020, abstract: '',
 function makeApi(overrides: Record<string, unknown> = {}) {
   return {
     getPaperText: vi.fn(async () => '论文全文'),
+    getPaperTextPaged: vi.fn(async () => '[第1页]\n论文全文'),
     streamChat: vi.fn(async (_args: any, onToken: (d: string, k: string) => void) => {
       onToken('这是', 'content'); onToken('AI', 'content'); onToken('的回答', 'content')
       return { text: '这是AI的回答', truncated: false, usedChars: 100, totalChars: 100 }
@@ -35,7 +36,7 @@ describe('ChatView', () => {
     ;(window as any).api = makeApi({ streamChat })
     render(<ChatView paper={paper} />)
 
-    await waitFor(() => expect((window as any).api.getPaperText).toHaveBeenCalled())
+    await waitFor(() => expect((window as any).api.getPaperTextPaged).toHaveBeenCalled())
     // Simulate text ready by waiting for the send button to be enabled
     await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
 
@@ -228,9 +229,9 @@ describe('ChatView', () => {
 
   // P0: textReady=false 时发送禁用
   it('disables send button while paper text is loading', async () => {
-    // getPaperText never resolves
+    // getPaperTextPaged never resolves
     ;(window as any).api = makeApi({
-      getPaperText: vi.fn(() => new Promise(() => {})),
+      getPaperTextPaged: vi.fn(() => new Promise(() => {})),
     })
     render(<ChatView paper={paper} />)
     const sendBtn = screen.getByRole('button', { name: /发送/ })
@@ -333,5 +334,24 @@ describe('ChatView', () => {
     fireEvent.click(screen.getByRole('button', { name: /清空对话/ }))
     await waitFor(() => expect(clearChat).toHaveBeenCalledWith('P1'))
     await waitFor(() => expect(screen.queryByText('旧消息')).not.toBeInTheDocument())
+  })
+
+  // CJ-5: [页N] chip 渲染 + onPageJump 回调
+  it('renders [页N] chips in assistant reply and calls onPageJump', async () => {
+    const streamChat = vi.fn(async (_a: any, onToken: any) => {
+      onToken('见 [页2]', 'content')
+      return { text: '见 [页2]', truncated: false, usedChars: 10, totalChars: 10 }
+    })
+    const onPageJump = vi.fn()
+    ;(window as any).api = makeApi({ streamChat })
+    render(<ChatView paper={paper} onPageJump={onPageJump} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
+    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
+    // wait for streaming to complete (send button re-enabled) before querying the chip
+    await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
+    const chip = screen.getByRole('button', { name: '[页2]' })
+    fireEvent.click(chip)
+    expect(onPageJump).toHaveBeenCalledWith(2)
   })
 })
