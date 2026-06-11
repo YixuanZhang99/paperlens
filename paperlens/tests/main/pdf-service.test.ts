@@ -13,6 +13,28 @@ function fakeLoader() {
   }))
 }
 
+function fakeDoc(pages: string[]) {
+  return {
+    numPages: pages.length,
+    async getPage(n: number) { return { async getTextContent() { return { items: pages[n - 1].split(' ').map(str => ({ str })) } } } },
+  }
+}
+
+describe('extractPdfText pageMarkers', () => {
+  it('injects [第N页] before each page when pageMarkers=true', async () => {
+    const t = await extractPdfText(new Uint8Array(), { loadDocument: async () => fakeDoc(['alpha', 'beta']), pageMarkers: true })
+    expect(t).toContain('[第1页]')
+    expect(t).toContain('[第2页]')
+    expect(t.indexOf('[第1页]')).toBeLessThan(t.indexOf('alpha'))
+    expect(t.indexOf('alpha')).toBeLessThan(t.indexOf('[第2页]'))
+  })
+  it('omits markers by default (KB/deepread unchanged)', async () => {
+    const t = await extractPdfText(new Uint8Array(), { loadDocument: async () => fakeDoc(['alpha', 'beta']) })
+    expect(t).not.toContain('[第1页]')
+    expect(t).toContain('alpha')
+  })
+})
+
 describe('extractPdfText', () => {
   it('joins text items across pages with spaces and newlines', async () => {
     const text = await extractPdfText(new Uint8Array([1, 2, 3]), { loadDocument: fakeLoader() })
