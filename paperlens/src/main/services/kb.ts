@@ -175,6 +175,47 @@ export function buildKbAnswerMessages(question: string, sources: KbSource[], his
   ]
 }
 
+// 综述 map 阶段取材：论文开头的 chunk（摘要/引言）最能代表全文
+export function representativeChunks(db: DatabaseType.Database, paperKey: string, k = 3): string[] {
+  const rows = db.prepare(
+    'SELECT text FROM chunks WHERE paper_key = ? ORDER BY seq ASC LIMIT ?'
+  ).all(paperKey, k) as Array<{ text: string }>
+  return rows.map(r => r.text)
+}
+
+// 综述 map 阶段：单篇论文片段 → 3-5 条核心要点
+export function buildReviewMapMessages(paperTitle: string, chunks: string[]): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        '你是文献综述助手。基于下面提供的论文片段，提炼该论文的 3-5 条核心要点，' +
+        '需覆盖方法、结论、局限。用 Markdown 无序列表输出，总长不超过 300 字，' +
+        '忠于原文，不要编造片段中没有的内容。',
+    },
+    { role: 'user', content: `标题：${paperTitle}\n\n${chunks.join('\n\n')}` },
+  ]
+}
+
+// 综述 reduce 阶段：多篇要点 → 结构化中文综述（四节固定结构）
+export function buildReviewReduceMessages(
+  scopeLabel: string,
+  items: Array<{ title: string; points: string }>
+): ChatMessage[] {
+  const body = items.map(it => `### ${it.title}\n${it.points}`).join('\n\n')
+  return [
+    {
+      role: 'system',
+      content:
+        '你是文献综述助手。基于下面多篇论文的要点，撰写一篇结构化的中文文献综述。' +
+        '综述必须包含以下四节（用这些二级标题，缺一不可）：' +
+        '## 主题分组、## 方法对照、## 主要分歧、## 开放问题。' +
+        '引用论文时使用论文标题；忠于各论文要点，不要编造要点中没有的内容。',
+    },
+    { role: 'user', content: `综述范围：${scopeLabel}\n\n${body}` },
+  ]
+}
+
 // rerank：让 LLM 给每个检索片段与问题的相关性打分，过滤 bm25 的误命中
 export function buildRerankMessages(question: string, hits: ChunkHit[]): ChatMessage[] {
   const list = hits
