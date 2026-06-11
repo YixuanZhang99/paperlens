@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { TextLayer } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { findAllMatchRanges } from '../lib/quote-match'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -16,7 +17,8 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
   // 页内搜索（Ctrl/Cmd+F）
   const searchRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
-  const [hits, setHits] = useState<HTMLElement[]>([])
+  // 每个命中 = 该匹配覆盖的一组 span（跨 span 匹配可能不止一个）
+  const [hits, setHits] = useState<HTMLElement[][]>([])
   const [cur, setCur] = useState(0)
   const [renderTick, setRenderTick] = useState(0) // textLayer 重渲染后 +1，触发重匹配
 
@@ -33,32 +35,34 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // query 或 textLayer 变化 → 清旧高亮、重匹配（span 级，大小写不敏感子串）
+  // query 或 textLayer 变化 → 清旧高亮、重匹配（逐页拼接全文，跨 span、归一化子串）
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    container.querySelectorAll('span.search-hit').forEach(el =>
+    container.querySelectorAll('span.search-hit, span.search-hit-active').forEach(el =>
       el.classList.remove('search-hit', 'search-hit-active'))
-    const q = query.trim().toLowerCase()
-    if (q.length < 2) { setHits([]); setCur(0); return }
-    const found: HTMLElement[] = []
-    container.querySelectorAll<HTMLElement>('.textLayer span').forEach(span => {
-      if ((span.textContent ?? '').toLowerCase().includes(q)) {
-        span.classList.add('search-hit')
-        found.push(span)
+    const matches: HTMLElement[][] = []
+    // 逐页（每个 .textLayer 一页）匹配，避免一处匹配跨页拼接
+    container.querySelectorAll<HTMLElement>('.textLayer').forEach(layer => {
+      const spans = [...layer.querySelectorAll<HTMLElement>('span')]
+      if (spans.length === 0) return
+      for (const r of findAllMatchRanges(spans.map(s => s.textContent ?? ''), query)) {
+        const group = spans.slice(r.start, r.end + 1)
+        group.forEach(s => s.classList.add('search-hit'))
+        matches.push(group)
       }
     })
-    setHits(found)
+    setHits(matches)
     setCur(0)
   }, [query, renderTick])
 
-  // 当前命中：active 类 + 滚动到视野中央
+  // 当前命中：整组 active 类 + 滚动首 span 到视野中央
   useEffect(() => {
     if (hits.length === 0) return
-    hits.forEach(h => h.classList.remove('search-hit-active'))
-    const el = hits[Math.min(cur, hits.length - 1)]
-    el.classList.add('search-hit-active')
-    el.scrollIntoView({ block: 'center' })
+    hits.flat().forEach(h => h.classList.remove('search-hit-active'))
+    const group = hits[Math.min(cur, hits.length - 1)]
+    group.forEach(s => s.classList.add('search-hit-active'))
+    group[0]?.scrollIntoView({ block: 'center' })
   }, [hits, cur])
 
   const moveCur = (delta: number) => {
