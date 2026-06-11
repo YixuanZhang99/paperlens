@@ -86,6 +86,13 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('opens the chat pane and is ready to receive PDF selection quotes', async () => {
+    localStorage.setItem('pl.chatOpen', '0') // 初始收起
+    render(<App />)
+    // 收起态：有「展开对话」轨
+    expect(await screen.findByRole('button', { name: '展开对话' })).toBeInTheDocument()
+  })
+
   // CJ-7: routes a [页N] click in chat to the reader via jumpTarget
   it('routes a [页N] click in chat to the reader via jumpTarget', async () => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn()

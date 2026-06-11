@@ -24,6 +24,8 @@ export function App() {
   const [chatW, setChatW] = useState(() => readW('pl.chatW', 430))
   const [navOpen, setNavOpen] = useState(() => localStorage.getItem('pl.navOpen') !== '0')
   const [chatOpen, setChatOpen] = useState(() => localStorage.getItem('pl.chatOpen') !== '0')
+  const [quoteToChat, setQuoteToChat] = useState<{ text: string; nonce: number } | null>(null)
+  const quoteNonce = useRef(0)
 
   // 启动静默增量索引：知识库「永远是新的」（失败忽略，不打扰用户）
   // 同时预取论文列表缓存，让知识库「打开论文」跳转即时（免去点击时的网络往返）
@@ -36,6 +38,11 @@ export function App() {
   const handlePageJump = useCallback((page: number) => {
     if (selected) setJumpTarget({ paperKey: selected.key, page, nonce: ++jumpNonce.current })
   }, [selected])
+
+  const handleAskSelection = useCallback((text: string) => {
+    setQuoteToChat({ text, nonce: ++quoteNonce.current })
+    setChatOpen(true)
+  }, [])
 
   async function openPaperByKey(paperKey: string) {
     setShowKb(false)
@@ -104,7 +111,7 @@ export function App() {
       </nav>
       <div className="gutter" onMouseDown={e => startDrag('nav', e)} />
       <section aria-label="阅读" role="region" className="pane-reader">
-        <ReaderView paper={selected} notesVersion={notesVersion} jumpTarget={jumpTarget} />
+        <ReaderView paper={selected} notesVersion={notesVersion} jumpTarget={jumpTarget} onAskSelection={handleAskSelection} />
       </section>
       <div className="gutter" onMouseDown={e => startDrag('chat', e)} />
       <section aria-label="对话" role="region" className="pane-chat">
@@ -114,7 +121,7 @@ export function App() {
               <span>AI 对话</span>
               <button className="btn-ghost pane-toggle" aria-label="收起对话" onClick={() => setChatOpen(false)}>»</button>
             </div>
-            <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} onPageJump={handlePageJump} />
+            <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} onPageJump={handlePageJump} quote={quoteToChat} />
           </>
         ) : (
           <button className="rail-toggle" aria-label="展开对话" onClick={() => setChatOpen(true)}>«</button>
