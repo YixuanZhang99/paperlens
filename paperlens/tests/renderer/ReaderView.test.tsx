@@ -94,4 +94,14 @@ describe('ReaderView', () => {
     rerender(<ReaderView paper={paper} jumpTarget={{ paperKey: 'P1', page: 2, nonce: 1 }} />)
     await waitFor(() => expect(getPaperPdf).toHaveBeenCalled())
   })
+
+  it('accepts onAskSelection prop without crashing in PDF tab', async () => {
+    const onAskSelection = vi.fn()
+    const getPaperPdf = vi.fn(async () => new ArrayBuffer(8))
+    ;(window as any).api = { ...(window as any).api, getPaperPdf, listNotes: vi.fn(async () => []) }
+    const paper = { key: 'P1', title: 'T', authors: [], year: 2020, abstract: '', attachmentKey: null }
+    render(<ReaderView paper={paper} onAskSelection={onAskSelection} />)
+    fireEvent.click(screen.getByRole('button', { name: '全文 PDF' }))
+    await waitFor(() => expect(getPaperPdf).toHaveBeenCalled())
+  })
 })

@@ -5,10 +5,11 @@ import { Markdown } from './Markdown'
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export function ReaderView({ paper, notesVersion = 0, jumpTarget = null }: {
+export function ReaderView({ paper, notesVersion = 0, jumpTarget = null, onAskSelection }: {
   paper: Paper | null
   notesVersion?: number
   jumpTarget?: { paperKey: string; page: number; nonce: number } | null
+  onAskSelection?: (text: string) => void
 }) {
   const [notes, setNotes] = useState<Note[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
@@ -139,7 +140,7 @@ export function ReaderView({ paper, notesVersion = 0, jumpTarget = null }: {
           {!pdfLoading && pdfData === null && <p className="empty-hint">该论文在 Zotero 中没有 PDF 附件。</p>}
           {pdfData && (
             <Suspense fallback={<p className="empty-hint">渲染中…</p>}>
-              <PdfCanvas data={pdfData} />
+              <PdfCanvas data={pdfData} onAskSelection={onAskSelection} />
             </Suspense>
           )}
         </div>
