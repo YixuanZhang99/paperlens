@@ -11,10 +11,12 @@ const baseApi = () => ({
   kbIndex: vi.fn(async () => ({ indexed: 0, skipped: 0 })),
   listAllNotes: vi.fn(async () => notes),
   listPapers: vi.fn(async () => [{ key: 'P1', title: 'RLHF 论文', authors: '', year: 2024, abstract: '' }]),
+  listCollections: vi.fn(async () => [{ key: 'C1', name: '对齐研究' }]),
   deleteNote: vi.fn(async () => undefined),
   addNote: vi.fn(async (_n: { paperKey: string; content: string; tags: string[]; autoTag?: boolean }) =>
     ({ id: 'n9', paperKey: 'P1', content: '', tags: [], createdAt: 3, notionPageId: null })),
   kbAsk: vi.fn(),
+  kbReview: vi.fn(),
 })
 
 // 标准 kbAsk mock：流式两段 token 后 resolve 含 chunks 的来源
@@ -196,5 +198,58 @@ describe('KnowledgeView', () => {
     expect(await screen.findByText('蒸馏方法笔记')).toBeInTheDocument()
     expect(screen.queryByText('关于RLHF的笔记')).not.toBeInTheDocument()
     expect((screen.getByPlaceholderText(/搜索笔记/) as HTMLInputElement).value).toBe('蒸馏')
+  })
+
+  it('review confirm flow: shows confirm on first click, calls kbReview on confirm', async () => {
+    const api = baseApi()
+    api.kbReview = vi.fn(async () => ({ content: '综述内容', papers: 2, skipped: 0 }))
+    ;(window as any).api = api
+    render(<KnowledgeView onOpenPaper={vi.fn()} />)
+    // 切到「索引状态」tab
+    fireEvent.click(await screen.findByRole('button', { name: /索引状态/ }))
+    // 首次点击「生成综述」→ 出现「确认生成」，kbReview 未调
+    fireEvent.click(await screen.findByRole('button', { name: '生成综述' }))
+    expect(await screen.findByRole('button', { name: '确认生成' })).toBeInTheDocument()
+    expect(api.kbReview).not.toHaveBeenCalled()
+    // 点「确认生成」→ kbReview 被调，collectionKey 为 null（全部论文）
+    fireEvent.click(screen.getByRole('button', { name: '确认生成' }))
+    await waitFor(() => expect(api.kbReview).toHaveBeenCalledTimes(1))
+    expect(api.kbReview.mock.calls[0][0]).toMatchObject({ collectionKey: null })
+  })
+
+  it('review streaming preview: onToken triggers preview, completion shows content', async () => {
+    const api = baseApi()
+    api.kbReview = vi.fn(async (_args: any, _onProgress: any, onToken: any) => {
+      onToken('综述内容', 'content')
+      return { content: '综述内容', papers: 2, skipped: 0 }
+    })
+    ;(window as any).api = api
+    render(<KnowledgeView onOpenPaper={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /索引状态/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '生成综述' }))
+    fireEvent.click(await screen.findByRole('button', { name: '确认生成' }))
+    await waitFor(() => expect(screen.getByText('综述内容')).toBeInTheDocument())
+  })
+
+  it('review save as note: after completion, clicking save calls addNote with review content', async () => {
+    const api = baseApi()
+    api.kbReview = vi.fn(async (_args: any, _onProgress: any, onToken: any) => {
+      onToken('综述内容正文', 'content')
+      return { content: '综述内容正文', papers: 2, skipped: 0 }
+    })
+    ;(window as any).api = api
+    render(<KnowledgeView onOpenPaper={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /索引状态/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '生成综述' }))
+    fireEvent.click(await screen.findByRole('button', { name: '确认生成' }))
+    // 等待「存为笔记」按钮出现
+    const saveBtn = await screen.findByRole('button', { name: '存为笔记' })
+    fireEvent.click(saveBtn)
+    await waitFor(() => expect(api.addNote).toHaveBeenCalledTimes(1))
+    const arg = api.addNote.mock.calls[0][0]
+    expect(arg.content).toContain('文献综述')
+    expect(arg.autoTag).toBe(true)
+    // 按钮变「已存为笔记」
+    await waitFor(() => expect(screen.getByRole('button', { name: /已存为笔记/ })).toBeInTheDocument())
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChatMessage, Note } from '@shared/types'
+import type { ChatMessage, Note, ZoteroCollection } from '@shared/types'
 import { Markdown } from './Markdown'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -30,12 +30,23 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
   const [status, setStatus] = useState<{ indexedPapers: number; totalPapers: number; totalChunks: number } | null>(null)
   const [indexing, setIndexing] = useState(false)
   const [progress, setProgress] = useState('')
+  // 自动综述状态
+  const [collections, setCollections] = useState<ZoteroCollection[]>([])
+  const [revScope, setRevScope] = useState('')
+  const [revConfirm, setRevConfirm] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const [revProgress, setRevProgress] = useState('')
+  const [revPreview, setRevPreview] = useState('')
+  const [revDone, setRevDone] = useState<{ content: string; papers: number } | null>(null)
+  const [revSaved, setRevSaved] = useState(false)
+  const [revPaperKey, setRevPaperKey] = useState('')
 
   useEffect(() => {
     window.api.listAllNotes().then(setNotes).catch(() => {})
     window.api.kbStatus().then(setStatus).catch(() => {})
     window.api.listPapers().catch(() => [])
       .then(ps => setPaperTitles(new Map(ps.map(p => [p.key, p.title]))))
+    window.api.listCollections().catch(() => []).then(setCollections)
     runIndex() // 打开即后台增量索引（已索引的论文会秒过）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -70,6 +81,62 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
     } catch (e) {
       setError('索引失败：' + errMsg(e))
     } finally { setIndexing(false); setProgress('') }
+  }
+
+  async function startReview() {
+    const scopeLabel = revScope
+      ? (collections.find(c => c.key === revScope)?.name ?? revScope)
+      : '全部论文'
+    setRevConfirm(false)
+    setReviewing(true)
+    setRevPreview('')
+    setRevDone(null)
+    setRevSaved(false)
+    setRevProgress('')
+    let firstPaperKey = ''
+    try {
+      const ps = await window.api.listPapers(revScope || null)
+      firstPaperKey = ps[0]?.key ?? ''
+    } catch { /* 忽略，存按钮禁用 */ }
+    setRevPaperKey(firstPaperKey)
+    try {
+      const result = await window.api.kbReview(
+        { collectionKey: revScope || null, scopeLabel },
+        (done, total, title) => setRevProgress(`${done}/${total} ${title}`),
+        (delta, kind) => { if (kind !== 'reasoning') setRevPreview(p => p + delta) },
+      )
+      setRevDone({ content: result.content, papers: result.papers })
+    } catch (e) {
+      setError('综述失败：' + errMsg(e))
+    } finally {
+      setReviewing(false)
+      setRevProgress('')
+    }
+  }
+
+  function resetReview() {
+    setRevConfirm(false)
+    setReviewing(false)
+    setRevProgress('')
+    setRevPreview('')
+    setRevDone(null)
+    setRevSaved(false)
+    setRevPaperKey('')
+  }
+
+  async function saveReviewAsNote() {
+    if (!revDone || revSaved || !revPaperKey) return
+    const scopeLabel = revScope
+      ? (collections.find(c => c.key === revScope)?.name ?? revScope)
+      : '全部论文'
+    const content = `# 文献综述（${scopeLabel}，${revDone.papers} 篇）\n\n` + revDone.content
+    try {
+      await window.api.addNote({ paperKey: revPaperKey, content, tags: [], autoTag: true })
+      setRevSaved(true)
+      window.api.listAllNotes().then(setNotes).catch(() => {})
+    } catch (e) {
+      setError('存为笔记失败：' + errMsg(e))
+    }
   }
 
   async function ask() {
@@ -252,6 +319,51 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
           {status && <p>已索引 <b>{status.indexedPapers} / {status.totalPapers}</b> 篇论文，共 {status.totalChunks} 个片段。</p>}
           {indexing && <p className="empty-hint">索引中：{progress || '准备中…'}</p>}
           <button onClick={runIndex} disabled={indexing}>更新索引</button>
+          <div className="kb-review">
+            <div className="kb-review-head">
+              <span>📝 生成综述</span>
+              <select
+                aria-label="综述范围"
+                value={revScope}
+                onChange={e => { setRevScope(e.target.value); setRevConfirm(false) }}
+                disabled={reviewing}>
+                <option value="">全部论文</option>
+                {collections.map(c => (
+                  <option key={c.key} value={c.key}>{c.name}</option>
+                ))}
+              </select>
+              {!revConfirm && !reviewing && !revDone && (
+                <button onClick={() => setRevConfirm(true)}>生成综述</button>
+              )}
+              {(revDone || reviewing) && (
+                <button className="btn-ghost" onClick={resetReview} disabled={reviewing}>清空</button>
+              )}
+            </div>
+            {revConfirm && !reviewing && !revDone && (
+              <div className="kb-review-head" style={{ marginTop: 8 }}>
+                <span>将对范围内每篇已索引论文发起 1 次提炼调用 + 1 次汇总调用，确认生成？</span>
+                <button className="btn-primary" onClick={startReview}>确认生成</button>
+                <button onClick={() => setRevConfirm(false)}>取消</button>
+              </div>
+            )}
+            {reviewing && (
+              <p className="empty-hint">综述中：{revProgress || '准备中…'}</p>
+            )}
+            {(reviewing || revDone) && revPreview && (
+              <div className="kb-review-preview">
+                <Markdown>{revPreview}</Markdown>
+              </div>
+            )}
+            {revDone && (
+              <div className="kb-review-head" style={{ marginTop: 8 }}>
+                <button
+                  onClick={saveReviewAsNote}
+                  disabled={revSaved || !revPaperKey}>
+                  {revSaved ? '✓ 已存为笔记' : '存为笔记'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

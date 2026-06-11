@@ -56,6 +56,18 @@ const api = {
     return ipcRenderer.invoke('kb:ask', args).finally(() => ipcRenderer.removeListener('kb:token', listener))
   },
   deleteNote: (id: string): Promise<void> => ipcRenderer.invoke('notes:delete', id),
+  kbReview: (
+    args: { collectionKey: string | null; scopeLabel: string },
+    onProgress: (done: number, total: number, title: string) => void,
+    onToken: (delta: string, kind: 'content' | 'reasoning') => void,
+  ): Promise<{ content: string; papers: number; skipped: number }> => {
+    const p = (_e: Electron.IpcRendererEvent, done: number, total: number, title: string) => onProgress(done, total, title)
+    const t = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
+    ipcRenderer.on('kb:review-progress', p); ipcRenderer.on('kb:review-token', t)
+    return ipcRenderer.invoke('kb:review', args).finally(() => {
+      ipcRenderer.removeListener('kb:review-progress', p); ipcRenderer.removeListener('kb:review-token', t)
+    })
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

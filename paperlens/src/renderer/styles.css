@@ -514,3 +514,9 @@ input::placeholder { color: var(--text-3); }
 
 /* 句级高亮：引用定位命中的原文 spans（黄底 3 秒渐隐由 JS 移除类完成） */
 .textLayer span.sentence-flash { background: rgba(250, 204, 21, .55); }
+
+/* ─── 知识库·自动综述 ─────────────────────────────────────────── */
+.kb-review { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.kb-review-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.kb-review select { font-size: 12.5px; padding: 4px 8px; }
+.kb-review-preview { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); max-height: 280px; overflow: auto; }

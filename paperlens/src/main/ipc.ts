@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
-import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys } from './services/kb'
+import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
 let currentAbort: AbortController | null = null
@@ -202,5 +202,29 @@ export function registerIpc(c: Container) {
     if (!content) throw new Error('精读生成失败：AI 未返回内容')
     const tags = await generateTags(c, content)
     return c.notesRepo.add({ paperKey: paper.key, content, tags })
+  })
+
+  // 自动综述：map（逐篇要点提炼）+ reduce（汇总综述，流式）
+  ipcMain.handle('kb:review', async (event, args: { collectionKey: string | null; scopeLabel: string }) => {
+    const papers = await c.zotero().listPapers(args.collectionKey)
+    const indexed = indexedPaperKeys(c.db)
+    const scoped = papers.filter(p => indexed.has(p.key))
+    if (scoped.length === 0) return { content: '该范围内没有已索引的论文，请先到「索引状态」更新索引。', papers: 0, skipped: papers.length }
+    const items: Array<{ title: string; points: string }> = []
+    let done = 0, skipped = papers.length - scoped.length
+    for (const p of scoped) {
+      try {
+        const points = await c.ai().complete(buildReviewMapMessages(p.title, representativeChunks(c.db, p.key)))
+        items.push({ title: p.title, points })
+      } catch { skipped++ }
+      done++
+      event.sender.send('kb:review-progress', done, scoped.length, p.title)
+    }
+    if (items.length === 0) throw new Error('综述失败：所有论文要点提炼均失败')
+    const content = await c.ai().stream(
+      buildReviewReduceMessages(args.scopeLabel, items),
+      (delta, kind) => event.sender.send('kb:review-token', delta, kind),
+    )
+    return { content, papers: items.length, skipped }
   })
 }
