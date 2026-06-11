@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Note, Paper } from '@shared/types'
 import { Markdown } from './Markdown'
+import { findQuoteRange } from '../lib/quote-match'
 
 const PdfCanvas = lazy(() => import('./PdfCanvas'))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -8,7 +9,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function ReaderView({ paper, notesVersion = 0, jumpTarget = null, onAskSelection }: {
   paper: Paper | null
   notesVersion?: number
-  jumpTarget?: { paperKey: string; page: number; nonce: number } | null
+  jumpTarget?: { paperKey: string; page: number; quote?: string; nonce: number } | null
   onAskSelection?: (text: string) => void
 }) {
   const [notes, setNotes] = useState<Note[]>([])
@@ -42,8 +43,22 @@ export function ReaderView({ paper, notesVersion = 0, jumpTarget = null, onAskSe
         if (canvases.length >= jumpTarget.page) {
           const el = canvases[jumpTarget.page - 1] as HTMLElement
           el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          el.classList.add('page-flash')
-          setTimeout(() => el.classList.remove('page-flash'), 1500)
+          const wrap = el.closest('.pdf-page-wrap') ?? el.parentElement
+          let sentenceHit = false
+          if (jumpTarget.quote && wrap) {
+            const spans = [...wrap.querySelectorAll('.textLayer span')] as HTMLElement[]
+            const range = findQuoteRange(spans.map(s => s.textContent ?? ''), jumpTarget.quote)
+            if (range) {
+              sentenceHit = true
+              const targets = spans.slice(range.start, range.end + 1)
+              targets.forEach(s => s.classList.add('sentence-flash'))
+              setTimeout(() => targets.forEach(s => s.classList.remove('sentence-flash')), 3000)
+            }
+          }
+          if (!sentenceHit) {
+            el.classList.add('page-flash')
+            setTimeout(() => el.classList.remove('page-flash'), 1500)
+          }
           return
         }
         await new Promise(r => setTimeout(r, 200))

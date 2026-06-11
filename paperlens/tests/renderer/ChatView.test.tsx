@@ -352,7 +352,7 @@ describe('ChatView', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
     const chip = screen.getByRole('button', { name: '[页2]' })
     fireEvent.click(chip)
-    expect(onPageJump).toHaveBeenCalledWith(2)
+    expect(onPageJump).toHaveBeenCalledWith(2, undefined)
   })
 
   it('injects selected quote into the textarea and focuses it when quote nonce changes', async () => {

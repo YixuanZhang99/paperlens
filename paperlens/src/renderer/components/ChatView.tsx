@@ -17,7 +17,7 @@ type Bubble = ChatMessage & { reasoning?: string }
 
 type StreamResult = { text: string; truncated: boolean; usedChars: number; totalChars: number }
 
-export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Paper | null; onNoteSaved?: () => void; onPageJump?: (page: number) => void; quote?: { text: string; nonce: number } | null }) {
+export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Paper | null; onNoteSaved?: () => void; onPageJump?: (page: number, quote?: string) => void; quote?: { text: string; nonce: number } | null }) {
   const [history, setHistory] = useState<Bubble[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)

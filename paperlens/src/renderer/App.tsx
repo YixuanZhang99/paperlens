@@ -17,7 +17,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showKb, setShowKb] = useState(false)
   const [notesVersion, setNotesVersion] = useState(0)
-  const [jumpTarget, setJumpTarget] = useState<{ paperKey: string; page: number; nonce: number } | null>(null)
+  const [jumpTarget, setJumpTarget] = useState<{ paperKey: string; page: number; quote?: string; nonce: number } | null>(null)
   const jumpNonce = useRef(0)
   // 三栏宽度可拖拽、左右栏可收起；宽度与开合记忆到 localStorage
   const [navW, setNavW] = useState(() => readW('pl.navW', 290))
@@ -35,8 +35,8 @@ export function App() {
     window.api.listPapers().then(ps => { papersCache.current = ps }).catch(() => {})
   }, [])
 
-  const handlePageJump = useCallback((page: number) => {
-    if (selected) setJumpTarget({ paperKey: selected.key, page, nonce: ++jumpNonce.current })
+  const handlePageJump = useCallback((page: number, quote?: string) => {
+    if (selected) setJumpTarget({ paperKey: selected.key, page, quote, nonce: ++jumpNonce.current })
   }, [selected])
 
   const handleAskSelection = useCallback((text: string) => {

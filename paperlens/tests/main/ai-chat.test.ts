@@ -75,6 +75,11 @@ describe('buildMessages → BuiltContext', () => {
     const { messages } = buildMessages({ paper: { title: 'T', authors: [], year: 2020 } as any, paperText: '[第1页]\n正文', history: [], userInput: 'q' })
     expect(messages[0].content).toMatch(/\[页N\]|页码|\[第N页\]/)
   })
+
+  it('buildMessages instructs sentence-level citation format [页N:"原文短句"]', () => {
+    const { messages } = buildMessages({ paper: { title: 'T', authors: [], year: 2020 } as any, paperText: '[第1页]\n正文', history: [], userInput: 'q' })
+    expect(messages[0].content).toMatch(/\[页N:"原文短句"\]|原文短句/)
+  })
 })
 
 describe('createAiChat.stream abort', () => {
