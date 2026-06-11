@@ -13,6 +13,68 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(1) // 1 = 适应宽度
   const [sel, setSel] = useState<{ x: number; y: number; text: string } | null>(null)
+  // 页内搜索（Ctrl/Cmd+F）
+  const searchRef = useRef<HTMLInputElement>(null)
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<HTMLElement[]>([])
+  const [cur, setCur] = useState(0)
+  const [renderTick, setRenderTick] = useState(0) // textLayer 重渲染后 +1，触发重匹配
+
+  // Cmd/Ctrl+F：PDF tab 打开时聚焦搜索框
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && document.querySelector('.pdf-viewer')) {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // query 或 textLayer 变化 → 清旧高亮、重匹配（span 级，大小写不敏感子串）
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    container.querySelectorAll('span.search-hit').forEach(el =>
+      el.classList.remove('search-hit', 'search-hit-active'))
+    const q = query.trim().toLowerCase()
+    if (q.length < 2) { setHits([]); setCur(0); return }
+    const found: HTMLElement[] = []
+    container.querySelectorAll<HTMLElement>('.textLayer span').forEach(span => {
+      if ((span.textContent ?? '').toLowerCase().includes(q)) {
+        span.classList.add('search-hit')
+        found.push(span)
+      }
+    })
+    setHits(found)
+    setCur(0)
+  }, [query, renderTick])
+
+  // 当前命中：active 类 + 滚动到视野中央
+  useEffect(() => {
+    if (hits.length === 0) return
+    hits.forEach(h => h.classList.remove('search-hit-active'))
+    const el = hits[Math.min(cur, hits.length - 1)]
+    el.classList.add('search-hit-active')
+    el.scrollIntoView({ block: 'center' })
+  }, [hits, cur])
+
+  const moveCur = (delta: number) => {
+    if (hits.length === 0) return
+    setCur(c => (c + delta + hits.length) % hits.length)
+  }
+
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setQuery('')
+      e.currentTarget.blur()
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      moveCur(e.shiftKey ? -1 : 1)
+    }
+  }
 
   useEffect(() => {
     const onSelChange = () => {
@@ -87,6 +149,8 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
             }
           }
         }
+        // textLayer 全部渲染完成 → 若有搜索词则对新 DOM 重新匹配
+        if (!cancelled) setRenderTick(t => t + 1)
       })
       .catch((err) => {
         if (!cancelled) container.innerHTML = '<p style="color:crimson;padding:12px">PDF 渲染失败</p>'
@@ -104,6 +168,17 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
         <span className="pdf-zoom-pct">{Math.round(zoom * 100)}%</span>
         <button aria-label="放大" onClick={() => setZoom(z => clamp(z + ZOOM_STEP))} disabled={zoom >= ZOOM_MAX}>＋</button>
         <button onClick={() => setZoom(1)} disabled={zoom === 1}>适应宽度</button>
+        <input
+          ref={searchRef}
+          className="pdf-search-input"
+          placeholder="搜索…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={onSearchKeyDown}
+        />
+        <span className="pdf-search-count">{hits.length > 0 ? `${cur + 1}/${hits.length}` : '0/0'}</span>
+        <button aria-label="上一个" onClick={() => moveCur(-1)} disabled={hits.length === 0}>‹</button>
+        <button aria-label="下一个" onClick={() => moveCur(1)} disabled={hits.length === 0}>›</button>
       </div>
       <div ref={containerRef} className="pdf-pages" />
       {sel && onAskSelection && (

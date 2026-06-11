@@ -505,3 +505,9 @@ input::placeholder { color: var(--text-3); }
   box-shadow: var(--shadow); white-space: nowrap; cursor: pointer;
 }
 .ask-selection-btn:hover { background: #4338ca; }
+
+/* ─── PDF 页内搜索（Ctrl/Cmd+F）──────────────────────────────── */
+.pdf-search-input { width: 130px; font-size: 12px; padding: 3px 8px; }
+.pdf-search-count { font-size: 11px; color: var(--text-3); min-width: 38px; text-align: center; }
+.textLayer span.search-hit { background: rgba(250, 204, 21, .45); }
+.textLayer span.search-hit-active { background: rgba(249, 115, 22, .6); }
