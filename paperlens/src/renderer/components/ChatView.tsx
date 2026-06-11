@@ -17,7 +17,7 @@ type Bubble = ChatMessage & { reasoning?: string }
 
 type StreamResult = { text: string; truncated: boolean; usedChars: number; totalChars: number }
 
-export function ChatView({ paper, onNoteSaved, onPageJump }: { paper: Paper | null; onNoteSaved?: () => void; onPageJump?: (page: number) => void }) {
+export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Paper | null; onNoteSaved?: () => void; onPageJump?: (page: number) => void; quote?: { text: string; nonce: number } | null }) {
   const [history, setHistory] = useState<Bubble[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -28,6 +28,17 @@ export function ChatView({ paper, onNoteSaved, onPageJump }: { paper: Paper | nu
   const [followups, setFollowups] = useState<string[]>([])
   const paperText = useRef('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // 选中文字引用注入：仅在 nonce 变化时注入一次，避免 rerender 覆盖用户编辑
+  const lastQuoteNonce = useRef<number | null>(null)
+  useEffect(() => {
+    if (!quote || quote.nonce === lastQuoteNonce.current) return
+    lastQuoteNonce.current = quote.nonce
+    setInput(prev => `针对这段内容：\n「${quote.text}」\n\n` + prev)
+    taRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote?.nonce])
 
   // 自动滚动到底：history 流式增长、followups 异步出现、busy 切换都要跟随。
   // rAF 兜底——Markdown 在 commit 后才完成布局，单次设置会停在旧高度。
@@ -285,6 +296,7 @@ export function ChatView({ paper, onNoteSaved, onPageJump }: { paper: Paper | nu
         </div>
         <div className="input-row">
           <textarea
+            ref={taRef}
             className="chat-textarea"
             placeholder="输入问题…"
             value={input}

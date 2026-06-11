@@ -354,4 +354,25 @@ describe('ChatView', () => {
     fireEvent.click(chip)
     expect(onPageJump).toHaveBeenCalledWith(2)
   })
+
+  it('injects selected quote into the textarea and focuses it when quote nonce changes', async () => {
+    ;(window as any).api = makeApi()
+    const { rerender } = render(<ChatView paper={paper} quote={null} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
+    rerender(<ChatView paper={paper} quote={{ text: '自注意力机制', nonce: 1 }} />)
+    await waitFor(() => {
+      const ta = screen.getByPlaceholderText(/输入问题/) as HTMLTextAreaElement
+      expect(ta.value).toContain('自注意力机制')
+    })
+  })
+
+  it('does not re-inject when quote nonce is unchanged on rerender', async () => {
+    ;(window as any).api = makeApi()
+    const { rerender } = render(<ChatView paper={paper} quote={{ text: 'X', nonce: 5 }} />)
+    await waitFor(() => expect((screen.getByPlaceholderText(/输入问题/) as HTMLTextAreaElement).value).toContain('X'))
+    const ta = screen.getByPlaceholderText(/输入问题/) as HTMLTextAreaElement
+    fireEvent.change(ta, { target: { value: '我改过了' } })
+    rerender(<ChatView paper={paper} quote={{ text: 'X', nonce: 5 }} />)
+    expect((screen.getByPlaceholderText(/输入问题/) as HTMLTextAreaElement).value).toBe('我改过了')
+  })
 })
