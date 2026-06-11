@@ -82,17 +82,6 @@ describe('ChatView', () => {
     )
   })
 
-  it('passes deepThink=true when the 深思 toggle is on', async () => {
-    const streamChat = vi.fn(async () => ({ text: '答', truncated: false, usedChars: 1, totalChars: 1 }))
-    ;(window as any).api = makeApi({ streamChat })
-    render(<ChatView paper={paper} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /发送/ })).not.toBeDisabled())
-    fireEvent.click(screen.getByLabelText('深思'))
-    fireEvent.change(screen.getByPlaceholderText(/输入问题/), { target: { value: 'q' } })
-    fireEvent.click(screen.getByRole('button', { name: /发送/ }))
-    await waitFor(() => expect(streamChat).toHaveBeenCalledWith(
-      expect.objectContaining({ deepThink: true }), expect.any(Function)))
-  })
 
   it('sends on plain Enter but not while IME composition is active', async () => {
     const streamChat = vi.fn(async (_a: any, onToken: any) => {

@@ -22,7 +22,7 @@ describe('createAiChat.stream', () => {
         'data: [DONE]\n\n',
       ])
     )
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
+    const chat = createAiChat({ apiKey: 'k', fetch })
     const tokens: string[] = []
     const full = await chat.stream([{ role: 'user', content: 'q' }], d => tokens.push(d))
 
@@ -30,8 +30,8 @@ describe('createAiChat.stream', () => {
     expect(full).toBe('这是AI回答')
     const body = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string)
     expect(body.stream).toBe(true)
-    expect(body.model).toBe('deepseek-v4-flash')
-    expect(body.thinking).toEqual({ type: 'disabled' }) // 非深思：显式关闭思考
+    expect(body.model).toBe('deepseek-chat')
+    expect(body.thinking).toBeUndefined() // 统一 deepseek-chat，不发 thinking
   })
 
   it('handles delta content split across stream chunks (partial lines)', async () => {
@@ -42,7 +42,7 @@ describe('createAiChat.stream', () => {
         'data: [DONE]\n\n',
       ])
     )
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
+    const chat = createAiChat({ apiKey: 'k', fetch })
     const tokens: string[] = []
     const full = await chat.stream([{ role: 'user', content: 'q' }], d => tokens.push(d))
     expect(full).toBe('片段完成')
@@ -52,7 +52,7 @@ describe('createAiChat.stream', () => {
   it('throws on non-200', async () => {
     const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       new Response('nope', { status: 500 }))
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
+    const chat = createAiChat({ apiKey: 'k', fetch })
     await expect(chat.stream([{ role: 'user', content: 'q' }], () => {})).rejects.toThrow(/DeepSeek.*500/)
   })
 
@@ -70,7 +70,7 @@ describe('createAiChat.stream', () => {
       })
       return new Response(stream, { status: 200 })
     })
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch })
+    const chat = createAiChat({ apiKey: 'k', fetch })
     const tokens: string[] = []
     const full = await chat.stream([{ role: 'user', content: 'q' }], d => tokens.push(d))
     expect(full).toBe('片段')
@@ -87,7 +87,7 @@ describe('createAiChat.stream', () => {
         'data: [DONE]\n\n',
       ])
     )
-    const chat = createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', fetch, deepThink: true })
+    const chat = createAiChat({ apiKey: 'k', fetch })
     const events: Array<[string, string]> = []
     const full = await chat.stream([{ role: 'user', content: 'q' }], (d, kind) => events.push([kind, d]))
     expect(events).toEqual([
@@ -98,6 +98,6 @@ describe('createAiChat.stream', () => {
     ])
     expect(full).toBe('答案是X')
     const body = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string)
-    expect(body.thinking).toEqual({ type: 'enabled' }) // 深思：开启思考，回传 reasoning_content
+    expect(body.thinking).toBeUndefined() // 统一 deepseek-chat，不发 thinking
   })
 })

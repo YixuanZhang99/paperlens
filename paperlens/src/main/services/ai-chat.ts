@@ -64,7 +64,8 @@ export function resolveModel(model: string): string {
 
 export interface AiChatDeps {
   apiKey: string
-  model: string
+  /** 已忽略：createAiChat 内部统一用 deepseek-chat。保留可选以兼容现有调用方。 */
+  model?: string
   fetch: typeof fetch
   baseUrl?: string
   /** 深思模式：true → thinking.type=enabled（流式回传 reasoning_content + content）；
@@ -75,10 +76,8 @@ export interface AiChatDeps {
 
 export function createAiChat(deps: AiChatDeps) {
   const url = `${deps.baseUrl ?? 'https://api.deepseek.com'}/chat/completions`
-  const model = resolveModel(deps.model)
-  // 两种模式都显式声明 thinking，不依赖服务端默认（v4 默认是否开启思考随文档而变）：
-  // 确保非深思路径（complete/普通流式）绝不被默认思考模式拖慢、绝不冒出 reasoning_content。
-  const thinking = { type: deps.deepThink ? 'enabled' : 'disabled' } as const
+  const model = 'deepseek-chat' // 统一用 deepseek-chat，避免 v4-flash/thinking 触发 400
+  const thinking: { type: 'enabled' | 'disabled' } | undefined = undefined // 不发 thinking，JSON.stringify 自动丢弃 undefined
 
   async function complete(messages: ChatMessage[]): Promise<string> {
     const res = await deps.fetch(url, {
