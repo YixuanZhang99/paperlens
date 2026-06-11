@@ -5,3 +5,7 @@ release/
 e2e-shots/
 *.log
 .DS_Store
+
+# 本地真实密钥 / 环境文件（绝不提交）
+.env
+.env.*
