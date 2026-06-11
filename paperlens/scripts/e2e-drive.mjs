@@ -103,6 +103,27 @@ app.whenReady().then(async () => {
   await waitFor('zoom reset', `const c=document.querySelector('section[aria-label="阅读"] canvas'); return c && Math.abs(c.getBoundingClientRect().width - ${w0}) < 10`, 30000, 1000)
   ok('pdf-zoom', `${w0}px → ${w1}px → ${w0}px`)
 
+  // ── 3c. 页内搜索（Ctrl+F）：textLayer 命中高亮 + 上/下导航 ──────
+  await waitFor('textlayer ready', `return document.querySelectorAll('.pdf-pages .textLayer span').length > 5`, 30000, 1000)
+  // 取首个 ≥4 字母英文词作搜索词（确保有命中）
+  const term = await js(`
+    for (const s of document.querySelectorAll('.pdf-pages .textLayer span')) {
+      const m = (s.textContent||'').match(/[A-Za-z]{4,}/); if (m) return m[0]
+    } return 'the'`)
+  await js(`const i=document.querySelector('.pdf-search-input'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i, ${JSON.stringify(term)}); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+  await waitFor('search hits', `return document.querySelectorAll('.pdf-pages .textLayer span.search-hit').length > 0`, 10000, 500)
+  const sInfo = await js(`
+    const hits=document.querySelectorAll('.textLayer span.search-hit').length
+    const active=document.querySelectorAll('.textLayer span.search-hit-active').length
+    const count=(document.querySelector('.pdf-search-count')||{}).textContent||''
+    return JSON.stringify({hits, active, count})`)
+  const si = JSON.parse(sInfo)
+  await shot('18-pdf-search.png')
+  if (si.hits > 0 && si.active === 1 && /^1\//.test(si.count)) ok('pdf-search', `"${term}" hits=${si.hits} count=${si.count}`)
+  else fail('pdf-search', `term="${term}" ${sInfo}`)
+  // 清空搜索，避免干扰后续
+  await js(`const i=document.querySelector('.pdf-search-input'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i,''); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+
   if (process.env.DRIVE_QUICK) {
     console.log('DRIVE_QUICK set — skipping AI/Notion steps (4-8)')
   } else {
@@ -229,7 +250,10 @@ app.whenReady().then(async () => {
     if (nCite) {
       await js(`document.querySelector('.page-cite').click(); return true`)
       await waitFor('pdf jumped', `return !!document.querySelector('section[aria-label="阅读"] .pdf-stage canvas')`, 30000, 1000)
-      await shot('15-citation-jump.png'); ok('citation-jump', `[页N] chips=${nCite} → PDF 跳转`)
+      // 句级高亮：若 AI 标了 [页N:"原文"]，命中 spans 会加 .sentence-flash（3s 内）；否则整页 .page-flash
+      await sleep(800)
+      const flash = await js(`return JSON.stringify({ sentence: document.querySelectorAll('.textLayer span.sentence-flash').length, page: document.querySelectorAll('.page-flash').length })`)
+      await shot('15-citation-jump.png'); ok('citation-jump', `chips=${nCite} 跳转 flash=${flash}`)
     } else { await shot('15-citation-jump.png'); ok('citation-jump', 'AI 本轮未标页码（可接受降级）') }
   }
 
