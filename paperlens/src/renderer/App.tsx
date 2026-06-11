@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import type { Paper } from '@shared/types'
 import { LibraryView } from './components/LibraryView'
@@ -17,6 +17,8 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showKb, setShowKb] = useState(false)
   const [notesVersion, setNotesVersion] = useState(0)
+  const [jumpTarget, setJumpTarget] = useState<{ paperKey: string; page: number; nonce: number } | null>(null)
+  const jumpNonce = useRef(0)
   // 三栏宽度可拖拽、左右栏可收起；宽度与开合记忆到 localStorage
   const [navW, setNavW] = useState(() => readW('pl.navW', 290))
   const [chatW, setChatW] = useState(() => readW('pl.chatW', 430))
@@ -30,6 +32,10 @@ export function App() {
     window.api.kbIndex(() => {}).catch(() => {})
     window.api.listPapers().then(ps => { papersCache.current = ps }).catch(() => {})
   }, [])
+
+  const handlePageJump = useCallback((page: number) => {
+    if (selected) setJumpTarget({ paperKey: selected.key, page, nonce: ++jumpNonce.current })
+  }, [selected])
 
   async function openPaperByKey(paperKey: string) {
     setShowKb(false)
@@ -98,7 +104,7 @@ export function App() {
       </nav>
       <div className="gutter" onMouseDown={e => startDrag('nav', e)} />
       <section aria-label="阅读" role="region" className="pane-reader">
-        <ReaderView paper={selected} notesVersion={notesVersion} />
+        <ReaderView paper={selected} notesVersion={notesVersion} jumpTarget={jumpTarget} />
       </section>
       <div className="gutter" onMouseDown={e => startDrag('chat', e)} />
       <section aria-label="对话" role="region" className="pane-chat">
@@ -108,7 +114,7 @@ export function App() {
               <span>AI 对话</span>
               <button className="btn-ghost pane-toggle" aria-label="收起对话" onClick={() => setChatOpen(false)}>»</button>
             </div>
-            <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} />
+            <ChatView paper={selected} onNoteSaved={() => setNotesVersion(v => v + 1)} onPageJump={handlePageJump} />
           </>
         ) : (
           <button className="rail-toggle" aria-label="展开对话" onClick={() => setChatOpen(true)}>«</button>
