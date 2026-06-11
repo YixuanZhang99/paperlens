@@ -41,7 +41,9 @@ export function buildMessages(input: BuildMessagesInput): BuiltContext {
     role: 'system',
     content:
       `你是一个严谨的论文学习助手。基于以下论文与用户对话，帮助用户深入理解。` +
-      `只依据论文内容作答，不确定时明确说明。\n\n【论文元数据】\n${meta}\n\n【论文正文（${contextNote}）】\n${text}`,
+      `只依据论文内容作答，不确定时明确说明。` +
+      '\n当正文中出现 [第N页] 标记时，它表示该页起始；你引用论文具体内容时，请在该句末尾标注 [页N]（N 为页码），便于用户跳转核对。' +
+      `\n\n【论文元数据】\n${meta}\n\n【论文正文（${contextNote}）】\n${text}`,
   }
   const messages: ChatMessage[] = [system, ...recentHistory, { role: 'user', content: input.userInput }]
   return { messages, usedChars, totalChars, truncated }

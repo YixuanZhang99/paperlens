@@ -70,6 +70,11 @@ describe('buildMessages → BuiltContext', () => {
     expect(ctx.messages).toHaveLength(6)
     expect(ctx.messages.slice(1, 5).map(m => m.content)).toEqual(['m26', 'm27', 'm28', 'm29'])
   })
+
+  it('buildMessages instructs page citation with [页N]', () => {
+    const { messages } = buildMessages({ paper: { title: 'T', authors: [], year: 2020 } as any, paperText: '[第1页]\n正文', history: [], userInput: 'q' })
+    expect(messages[0].content).toMatch(/\[页N\]|页码|\[第N页\]/)
+  })
 })
 
 describe('createAiChat.stream abort', () => {
