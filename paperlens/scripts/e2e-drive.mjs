@@ -232,6 +232,26 @@ app.whenReady().then(async () => {
       await shot('15-citation-jump.png'); ok('citation-jump', `[页N] chips=${nCite} → PDF 跳转`)
     } else { await shot('15-citation-jump.png'); ok('citation-jump', 'AI 本轮未标页码（可接受降级）') }
   }
+
+  // ── 12. PDF 文本层 + 选中「问这段」（纯前端，DRIVE_QUICK 内即跑，不花 API）──
+  await js(`document.querySelectorAll('nav .paper-item')[0].click(); return true`)
+  await waitFor('pdf btn', `return [...document.querySelectorAll('button')].some(b=>b.textContent.includes('全文 PDF'))`, 10000)
+  await js(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('全文 PDF')).click(); return true`)
+  await waitFor('textlayer', `const t=document.querySelector('.pdf-page-wrap .textLayer'); return t && t.querySelectorAll('span').length>3`, 30000, 1000)
+  // 构造跨 span 选区 + 触发 selectionchange
+  const selLen = await js(`
+    const spans=[...document.querySelectorAll('.pdf-page-wrap .textLayer span')].slice(0,3)
+    const r=document.createRange(); r.setStart(spans[0].firstChild||spans[0],0); r.setEndAfter(spans[2])
+    const s=window.getSelection(); s.removeAllRanges(); s.addRange(r)
+    document.dispatchEvent(new Event('selectionchange'))
+    return s.toString().trim().length`)
+  await waitFor('ask btn', `return !!document.querySelector('.ask-selection-btn')`, 5000)
+  await shot('16-pdf-select.png')
+  await js(`document.querySelector('.ask-selection-btn').click(); return true`)
+  const injected = await waitFor('quote injected', `const t=document.querySelector('section[aria-label="对话"] .chat-textarea'); return t && t.value.includes('针对这段内容') ? t.value.slice(0,40) : false`, 5000, 500)
+  await shot('17-quote-injected.png')
+  if (injected) ok('ask-selection', `选中${selLen}字→浮按钮→注入对话`)
+  else fail('ask-selection', '注入失败')
   } catch (e) {
     fail('driver', e && e.message)
     try { await shot('99-failure.png') } catch {}
