@@ -85,7 +85,7 @@ export function createAiChat(deps: AiChatDeps) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.apiKey}` },
       body: JSON.stringify({ model, messages, stream: false, thinking }),
     })
-    if (!res.ok) throw new Error(`DeepSeek request failed: ${res.status}`)
+    if (!res.ok) throw new Error(`DeepSeek request failed: ${res.status} — ${(await res.text()).slice(0,300)}`)
     const data = (await res.json()) as { choices: Array<{ message: { content: string } }> }
     return data.choices[0]?.message?.content ?? ''
   }
@@ -110,7 +110,7 @@ export function createAiChat(deps: AiChatDeps) {
       if (isAbortError(err)) return '' // aborted before any token arrived
       throw err
     }
-    if (!res.ok) throw new Error(`DeepSeek stream failed: ${res.status}`)
+    if (!res.ok) throw new Error(`DeepSeek stream failed: ${res.status} — ${(await res.text()).slice(0,300)}`)
     if (!res.body) throw new Error('DeepSeek stream: empty body')
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
