@@ -8,6 +8,7 @@ const api = {
   listPapers: (collectionKey?: string | null): Promise<Paper[]> => ipcRenderer.invoke('zotero:list', collectionKey ?? null),
   listCollections: (): Promise<ZoteroCollection[]> => ipcRenderer.invoke('zotero:collections'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),
+  getPaperTextPaged: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:textPaged', paper),
   getPaperPdf: (paper: Paper): Promise<ArrayBuffer | null> => ipcRenderer.invoke('paper:pdfBytes', paper),
   sendChat: (a: { paper: Paper; paperText: string; history: ChatMessage[]; input: string }): Promise<string> =>
     ipcRenderer.invoke('chat:send', a),

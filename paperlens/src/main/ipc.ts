@@ -45,6 +45,20 @@ async function getPaperTextCached(c: Container, paper: Paper): Promise<string> {
   return text
 }
 
+// 对话引用定位专用：带 [第N页] 标记的正文。会话内存缓存（按附件 key），重启重抽取。
+const pagedTextCache = new Map<string, string>()
+async function getPaperTextPaged(c: Container, paper: Paper): Promise<string> {
+  const info = await c.zotero().findPdfAttachmentInfo(paper.key)
+  if (!info) return ''
+  const hit = pagedTextCache.get(info.key)
+  if (hit !== undefined) return hit
+  const bytes = await readPdfBytes(c, info)
+  if (!bytes) return ''
+  const text = await extractPdfText(bytes, { pageMarkers: true })
+  pagedTextCache.set(info.key, text)
+  return text
+}
+
 // AI 生成 2-4 个标签；任何失败回退空数组，绝不阻塞保存
 async function generateTags(c: Container, content: string): Promise<string[]> {
   try {
@@ -63,6 +77,9 @@ export function registerIpc(c: Container) {
 
   // 返回论文全文（带 sqlite 缓存）
   ipcMain.handle('paper:text', (_e, paper: Paper): Promise<string> => getPaperTextCached(c, paper))
+
+  // 对话引用定位：带 [第N页] 标记的正文（内存缓存，不入 pdf_cache）
+  ipcMain.handle('paper:textPaged', (_e, paper: Paper): Promise<string> => getPaperTextPaged(c, paper))
 
   // 返回论文 PDF 原始字节（不缓存——按需获取用于前端渲染）
   ipcMain.handle('paper:pdfBytes', async (_e, paper: Paper): Promise<ArrayBuffer | null> => {
