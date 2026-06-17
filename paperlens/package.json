@@ -35,6 +35,7 @@
         "dmg"
       ],
       "category": "public.app-category.education",
+      "icon": "build/icon.icns",
       "identity": null
     },
     "win": {
