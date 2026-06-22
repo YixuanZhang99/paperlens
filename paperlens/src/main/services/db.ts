@@ -46,5 +46,18 @@ export function migrate(db: DatabaseType.Database): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chat_paper ON chat_messages(paper_key, id);
+
+    CREATE TABLE IF NOT EXISTS highlights (
+      id TEXT PRIMARY KEY,
+      paper_key TEXT NOT NULL,
+      page_index INTEGER NOT NULL,
+      rects TEXT NOT NULL,
+      text TEXT NOT NULL,
+      color TEXT NOT NULL,
+      comment TEXT,
+      zotero_key TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_highlights_paper ON highlights(paper_key);
   `)
 }

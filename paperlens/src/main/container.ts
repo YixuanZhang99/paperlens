@@ -8,6 +8,7 @@ import { migrate } from './services/db'
 import { createConfigStore } from './services/config-store'
 import { createNotesRepo } from './services/notes-repo'
 import { createChatRepo } from './services/chat-repo'
+import { createHighlightsRepo } from './services/highlights-repo'
 import { createZoteroClient } from './services/zotero-client'
 import { createZoteroLocal } from './services/zotero-local'
 import { createAiChat } from './services/ai-chat'
@@ -43,6 +44,11 @@ export function createContainer() {
     genId: () => randomUUID(),
   })
   const chatRepo = createChatRepo(db)
+  const highlightsRepo = createHighlightsRepo({
+    db,
+    now: () => Date.now(),
+    genId: () => randomUUID(),
+  })
 
   // 工厂：按当前配置即时构造外部客户端（密钥可能随时被用户更新）
   const cfg = () => configStore.get()
@@ -57,6 +63,6 @@ export function createContainer() {
     join: (...parts) => join(...parts),
   })
 
-  return { configStore, db, notesRepo, chatRepo, zotero, ai, notion, zoteroLocal }
+  return { configStore, db, notesRepo, chatRepo, highlightsRepo, zotero, ai, notion, zoteroLocal }
 }
 export type Container = ReturnType<typeof createContainer>

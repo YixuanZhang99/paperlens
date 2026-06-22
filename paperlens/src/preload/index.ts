@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppConfig, ChatMessage, Note, Paper, ZoteroCollection } from '@shared/types'
+import type { AppConfig, ChatMessage, Highlight, Note, Paper, ZoteroCollection } from '@shared/types'
 import type { ChatRecord } from '../main/services/chat-repo'
 
 const api = {
@@ -56,6 +56,12 @@ const api = {
     return ipcRenderer.invoke('kb:ask', args).finally(() => ipcRenderer.removeListener('kb:token', listener))
   },
   deleteNote: (id: string): Promise<void> => ipcRenderer.invoke('notes:delete', id),
+  listHighlights: (paperKey: string): Promise<Highlight[]> => ipcRenderer.invoke('highlights:list', paperKey),
+  addHighlight: (h: { paperKey: string; pageIndex: number; rects: number[][]; text: string; color: string; comment?: string | null }): Promise<Highlight> =>
+    ipcRenderer.invoke('highlights:add', h),
+  updateHighlight: (a: { id: string; comment?: string | null; color?: string }): Promise<void> => ipcRenderer.invoke('highlights:update', a),
+  deleteHighlight: (id: string): Promise<void> => ipcRenderer.invoke('highlights:delete', id),
+  syncHighlights: (paperKey: string): Promise<{ synced: number; failed: number }> => ipcRenderer.invoke('highlights:sync', paperKey),
   kbReview: (
     args: { collectionKey: string | null; scopeLabel: string },
     onProgress: (done: number, total: number, title: string) => void,

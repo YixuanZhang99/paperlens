@@ -92,5 +92,28 @@ export function createZoteroClient(deps: ZoteroDeps) {
     return res.arrayBuffer()
   }
 
-  return { listPapers, listCollections, findPdfAttachment, findPdfAttachmentInfo, downloadAttachment }
+  /** 创建一个条目（如 annotation 高亮），返回新条目 key。需要写权限的 API key。 */
+  async function createAnnotation(item: object): Promise<string> {
+    const url = `${base}/users/${deps.userId}/items`
+    const res = await deps.fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify([item]),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`Zotero createAnnotation failed: ${res.status} — ${body.slice(0, 200)}`)
+    }
+    const data = (await res.json()) as {
+      successful?: Record<string, { key: string }>
+      failed?: Record<string, { message?: string }>
+    }
+    const failed = data.failed && Object.values(data.failed)[0]
+    if (failed) throw new Error(`Zotero createAnnotation failed: ${failed.message ?? 'unknown'}`)
+    const ok = data.successful && Object.values(data.successful)[0]
+    if (!ok?.key) throw new Error('Zotero createAnnotation: no key in response')
+    return ok.key
+  }
+
+  return { listPapers, listCollections, findPdfAttachment, findPdfAttachmentInfo, downloadAttachment, createAnnotation }
 }

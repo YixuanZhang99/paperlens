@@ -3,7 +3,12 @@ import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
 import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
+import { buildAnnotationPayload } from './services/zotero-annotation'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
+
+// Zotero sortIndex 的「距页顶」只影响侧栏排序（位置由 annotationPosition 精确给出），
+// 没存每页高度，这里用 US Letter 高度近似即可。
+const DEFAULT_PAGE_HEIGHT_PT = 792
 
 let currentAbort: AbortController | null = null
 
@@ -138,6 +143,38 @@ export function registerIpc(c: Container) {
   ipcMain.handle('notes:listAll', () => c.notesRepo.listAll())
 
   ipcMain.handle('notes:delete', (_e, id: string) => c.notesRepo.remove(id))
+
+  // —— PDF 高亮标注 ——
+  ipcMain.handle('highlights:list', (_e, paperKey: string) => c.highlightsRepo.listByPaper(paperKey))
+  ipcMain.handle('highlights:add', (_e, h: { paperKey: string; pageIndex: number; rects: number[][]; text: string; color: string; comment?: string | null }) =>
+    c.highlightsRepo.add(h))
+  ipcMain.handle('highlights:update', (_e, a: { id: string; comment?: string | null; color?: string }) => {
+    c.highlightsRepo.update(a.id, { comment: a.comment, color: a.color })
+  })
+  ipcMain.handle('highlights:delete', (_e, id: string) => c.highlightsRepo.remove(id))
+
+  // 把某论文未同步的高亮推送到 Zotero（单向）。需要写权限的 API key。
+  ipcMain.handle('highlights:sync', async (_e, paperKey: string) => {
+    const pending = c.highlightsRepo.listUnsynced(paperKey)
+    if (pending.length === 0) return { synced: 0, failed: 0 }
+    const attachmentKey = await c.zotero().findPdfAttachment(paperKey)
+    if (!attachmentKey) throw new Error('该论文在 Zotero 中没有 PDF 附件，无法同步标注')
+    let synced = 0, failed = 0
+    let lastError = ''
+    for (const hl of pending) {
+      try {
+        const item = buildAnnotationPayload(hl, attachmentKey, DEFAULT_PAGE_HEIGHT_PT)
+        const key = await c.zotero().createAnnotation(item)
+        c.highlightsRepo.markSynced(hl.id, key)
+        synced++
+      } catch (e) {
+        failed++
+        lastError = e instanceof Error ? e.message : String(e)
+      }
+    }
+    if (synced === 0 && failed > 0) throw new Error(lastError || '同步失败')
+    return { synced, failed }
+  })
 
   ipcMain.handle('kb:status', async () => {
     const total = (await c.zotero().listPapers()).length

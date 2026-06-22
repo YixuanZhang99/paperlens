@@ -47,3 +47,17 @@ export interface ZoteroCollection {
   name: string
   parentKey: string | null
 }
+
+// PDF 高亮标注。rects 为 PDF 坐标系矩形 [x1,y1,x2,y2]（原点左下，单位 pt）。
+// zoteroKey 在推送到 Zotero 成功后回填，非 null 即「已同步」。
+export interface Highlight {
+  id: string
+  paperKey: string
+  pageIndex: number // 0 基页码（与 Zotero annotationPosition.pageIndex 对齐）
+  rects: number[][]
+  text: string
+  color: string // 十六进制，如 '#ffd400'
+  comment: string | null
+  zoteroKey: string | null
+  createdAt: number
+}
