@@ -237,33 +237,38 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
         if (!isMeaningfulRect(box)) continue
         const div = document.createElement('div')
         div.className = 'pdf-hl' + (hl.comment ? ' has-comment' : '')
+        div.dataset.hlId = hl.id
         div.style.cssText = `left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;background:${hl.color}`
-        div.title = hl.comment ? `📝 ${hl.comment}` : '点击编辑 / 删除'
-        div.onclick = () => {
-          const vr = viewerRef.current!.getBoundingClientRect()
-          const br = div.getBoundingClientRect()
-          setActiveHl({ hl, x: br.left - vr.left, y: br.bottom - vr.top + 4 })
-        }
+        if (hl.comment) div.title = `📝 ${hl.comment}`
         wrap.appendChild(div)
       }
     }
   }, [highlights, renderTick])
 
-  // 弹窗：点击外部 / 滚动时关闭
+  // 关闭弹窗前把注释存掉（单一保存出口，避免 onBlur/完成/外部点击多路径竞态丢输入）
+  function saveAndClose() {
+    if (activeHl) {
+      const v = noteRef.current?.value.trim() || null
+      if (v !== (activeHl.hl.comment ?? null)) void updateActiveHl({ comment: v })
+    }
+    setActiveHl(null)
+  }
+
+  // 弹窗：点击外部 / 滚动时保存并关闭
   useEffect(() => {
     if (!activeHl) return
     const onDown = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setActiveHl(null)
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) saveAndClose()
     }
-    const onScroll = () => setActiveHl(null)
+    const onScroll = () => saveAndClose()
     document.addEventListener('mousedown', onDown)
-    viewerRef.current?.querySelector('.pdf-pages')?.addEventListener('scroll', onScroll, true)
-    const stage = viewerRef.current?.parentElement
+    const stage = viewerRef.current?.parentElement // 真正的滚动容器是 .pdf-stage
     stage?.addEventListener('scroll', onScroll)
     return () => {
       document.removeEventListener('mousedown', onDown)
       stage?.removeEventListener('scroll', onScroll)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHl])
 
   // 触控板捏合 / ⌘(Ctrl)+滚轮 缩放
@@ -290,38 +295,57 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
 
   const clamp = clampZoom
 
-  // 由当前选区创建高亮；withNote=true 时创建后打开注释弹窗
+  // 由当前选区创建高亮；按 client 矩形所属页面分组（跨页选区每页各存一条），
+  // withNote=true 时创建后打开首条的注释弹窗
   async function createHighlight(withNote: boolean) {
     const s = window.getSelection()
     if (!s || s.rangeCount === 0) return
     const text = s.toString().trim()
+    const container = containerRef.current
+    if (!text || !container) return
     const range = s.getRangeAt(0)
-    const startEl = range.startContainer.nodeType === Node.TEXT_NODE
-      ? range.startContainer.parentElement
-      : (range.startContainer as HTMLElement)
-    const wrap = startEl?.closest<HTMLElement>('.pdf-page-wrap')
-    if (!wrap || !wrap.dataset.pageIndex) return
-    const pageIndex = Number(wrap.dataset.pageIndex)
-    const vp = viewportsRef.current[pageIndex]
-    if (!vp || !text) return
-    const wrapRect = wrap.getBoundingClientRect()
-    const clientRects = Array.from(range.getClientRects()).filter(r => isMeaningfulRect(r))
-    const rects: number[][] = clientRects.map(r => domRectToPdfRect(
-      { left: r.left - wrapRect.left, top: r.top - wrapRect.top, right: r.right - wrapRect.left, bottom: r.bottom - wrapRect.top },
-      (x, y) => vp.convertToPdfPoint(x, y),
-    ))
-    if (rects.length === 0) return
-    try {
-      const hl = await window.api.addHighlight({ paperKey, pageIndex, rects, text, color })
-      setHighlights(hs => [...hs, hl])
-      s.removeAllRanges()
-      setSel(null)
-      if (withNote) {
-        const vr = viewerRef.current!.getBoundingClientRect()
-        setActiveHl({ hl, x: Math.min(sel?.x ?? 40, vr.width - 280), y: (sel?.y ?? 40) + 8 })
+    const wraps = [...container.querySelectorAll<HTMLElement>('.pdf-page-wrap')]
+    // 用矩形中心点判定所属页面
+    const byPage = new Map<number, DOMRect[]>()
+    for (const r of Array.from(range.getClientRects())) {
+      if (!isMeaningfulRect(r)) continue
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2
+      const wrap = wraps.find(w => {
+        const wr = w.getBoundingClientRect()
+        return cx >= wr.left && cx <= wr.right && cy >= wr.top && cy <= wr.bottom
+      })
+      const pi = wrap?.dataset.pageIndex
+      if (pi == null) continue
+      const k = Number(pi)
+      let arr = byPage.get(k)
+      if (!arr) { arr = []; byPage.set(k, arr) }
+      arr.push(r)
+    }
+    if (byPage.size === 0) return
+    const created: Highlight[] = []
+    for (const [pageIndex, clientRects] of byPage) {
+      const wrap = wraps.find(w => Number(w.dataset.pageIndex) === pageIndex)
+      const vp = viewportsRef.current[pageIndex]
+      if (!wrap || !vp) continue
+      const wrapRect = wrap.getBoundingClientRect()
+      const rects: number[][] = clientRects.map(r => domRectToPdfRect(
+        { left: r.left - wrapRect.left, top: r.top - wrapRect.top, right: r.right - wrapRect.left, bottom: r.bottom - wrapRect.top },
+        (x, y) => vp.convertToPdfPoint(x, y),
+      ))
+      if (rects.length === 0) continue
+      try {
+        created.push(await window.api.addHighlight({ paperKey, pageIndex, rects, text, color }))
+      } catch (e) {
+        setSyncMsg('保存高亮失败：' + (e instanceof Error ? e.message : String(e)))
       }
-    } catch (e) {
-      setSyncMsg('保存高亮失败：' + (e instanceof Error ? e.message : String(e)))
+    }
+    if (created.length === 0) return
+    setHighlights(hs => [...hs, ...created])
+    s.removeAllRanges()
+    setSel(null)
+    if (withNote) {
+      const vr = viewerRef.current!.getBoundingClientRect()
+      setActiveHl({ hl: created[0], x: Math.min(sel?.x ?? 40, vr.width - 280), y: (sel?.y ?? 40) + 8 })
     }
   }
 
@@ -339,6 +363,24 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
     await window.api.deleteHighlight(id).catch(() => {})
     setHighlights(hs => hs.filter(h => h.id !== id))
     setActiveHl(null)
+  }
+
+  // 点击页面：若不是拖选结束（无选中文本），按几何命中已有高亮 → 打开其编辑弹窗
+  function onPagesClick(e: React.MouseEvent) {
+    if ((window.getSelection()?.toString() ?? '').trim()) return
+    const container = containerRef.current
+    if (!container) return
+    const hit = [...container.querySelectorAll<HTMLElement>('.pdf-hl')].find(d => {
+      const r = d.getBoundingClientRect()
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+    })
+    const id = hit?.dataset.hlId
+    if (!id) return
+    const hl = highlights.find(h => h.id === id)
+    if (!hl) return
+    const vr = viewerRef.current!.getBoundingClientRect()
+    const br = hit!.getBoundingClientRect()
+    setActiveHl({ hl, x: br.left - vr.left, y: br.bottom - vr.top + 4 })
   }
 
   async function syncToZotero() {
@@ -386,7 +428,7 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
         >{syncing ? '同步中…' : `同步Zotero${unsyncedCount ? ` (${unsyncedCount})` : ''}`}</button>
       </div>
       {syncMsg && <div className="pdf-sync-msg" role="status" onClick={() => setSyncMsg(null)}>{syncMsg}</div>}
-      <div ref={containerRef} className="pdf-pages" />
+      <div ref={containerRef} className="pdf-pages" onClick={onPagesClick} />
 
       {sel && (
         <div className="sel-toolbar" style={{ position: 'absolute', left: sel.x, top: sel.y, zIndex: 6 }}
@@ -422,11 +464,10 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
             className="hl-pop-note"
             placeholder="加条笔记（注释）…"
             defaultValue={activeHl.hl.comment ?? ''}
-            onBlur={e => updateActiveHl({ comment: e.target.value.trim() || null })}
           />
           <div className="hl-pop-foot">
             <button className="hl-pop-del" onClick={deleteActiveHl}>删除</button>
-            <button onClick={() => { void updateActiveHl({ comment: noteRef.current?.value.trim() || null }); setActiveHl(null) }}>完成</button>
+            <button onClick={saveAndClose}>完成</button>
           </div>
         </div>
       )}

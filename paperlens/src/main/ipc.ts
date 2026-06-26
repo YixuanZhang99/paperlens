@@ -6,9 +6,12 @@ import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerM
 import { buildAnnotationPayload } from './services/zotero-annotation'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
-// Zotero sortIndex 的「距页顶」只影响侧栏排序（位置由 annotationPosition 精确给出），
-// 没存每页高度，这里用 US Letter 高度近似即可。
-const DEFAULT_PAGE_HEIGHT_PT = 792
+// Zotero sortIndex 的「距页顶」只影响侧栏排序（标注在 PDF 上的落点由 annotationPosition 精确给出）。
+// 我们没存每页真实高度，但 sortIndex 只需「按页内从上到下单调」即可。取一个大于任何真实页高的
+// 参考值，使 top = REF - y 恒为正且随纵坐标下移而增大，A4/Letter/自定义尺寸都不会被 max(0,…) 夹平。
+const SORT_REF_TOP_PT = 2000
+// 同步在途守卫：避免同一论文并发/重复推送（UI 也会禁用按钮，这里是双保险）
+const syncingPapers = new Set<string>()
 
 let currentAbort: AbortController | null = null
 
@@ -155,25 +158,31 @@ export function registerIpc(c: Container) {
 
   // 把某论文未同步的高亮推送到 Zotero（单向）。需要写权限的 API key。
   ipcMain.handle('highlights:sync', async (_e, paperKey: string) => {
+    if (syncingPapers.has(paperKey)) return { synced: 0, failed: 0 } // 已有同步在途，忽略重复请求
     const pending = c.highlightsRepo.listUnsynced(paperKey)
     if (pending.length === 0) return { synced: 0, failed: 0 }
-    const attachmentKey = await c.zotero().findPdfAttachment(paperKey)
-    if (!attachmentKey) throw new Error('该论文在 Zotero 中没有 PDF 附件，无法同步标注')
-    let synced = 0, failed = 0
-    let lastError = ''
-    for (const hl of pending) {
-      try {
-        const item = buildAnnotationPayload(hl, attachmentKey, DEFAULT_PAGE_HEIGHT_PT)
-        const key = await c.zotero().createAnnotation(item)
-        c.highlightsRepo.markSynced(hl.id, key)
-        synced++
-      } catch (e) {
-        failed++
-        lastError = e instanceof Error ? e.message : String(e)
+    syncingPapers.add(paperKey)
+    try {
+      const attachmentKey = await c.zotero().findPdfAttachment(paperKey)
+      if (!attachmentKey) throw new Error('该论文在 Zotero 中没有 PDF 附件，无法同步标注')
+      let synced = 0, failed = 0
+      let lastError = ''
+      for (const hl of pending) {
+        try {
+          const item = buildAnnotationPayload(hl, attachmentKey, SORT_REF_TOP_PT)
+          const key = await c.zotero().createAnnotation(item)
+          c.highlightsRepo.markSynced(hl.id, key)
+          synced++
+        } catch (e) {
+          failed++
+          lastError = e instanceof Error ? e.message : String(e)
+        }
       }
+      if (synced === 0 && failed > 0) throw new Error(lastError || '同步失败')
+      return { synced, failed }
+    } finally {
+      syncingPapers.delete(paperKey)
     }
-    if (synced === 0 && failed > 0) throw new Error(lastError || '同步失败')
-    return { synced, failed }
   })
 
   ipcMain.handle('kb:status', async () => {
