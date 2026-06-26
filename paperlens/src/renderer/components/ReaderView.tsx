@@ -155,7 +155,7 @@ export function ReaderView({ paper, notesVersion = 0, jumpTarget = null, onAskSe
           {!pdfLoading && pdfData === null && <p className="empty-hint">该论文在 Zotero 中没有 PDF 附件。</p>}
           {pdfData && (
             <Suspense fallback={<p className="empty-hint">渲染中…</p>}>
-              <PdfCanvas data={pdfData} onAskSelection={onAskSelection} />
+              <PdfCanvas data={pdfData} paperKey={paper.key} onAskSelection={onAskSelection} />
             </Suspense>
           )}
         </div>

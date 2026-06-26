@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { TextLayer } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import type { Highlight } from '@shared/types'
 import { findAllMatchRanges } from '../lib/quote-match'
+import { domRectToPdfRect, pdfRectToBox, isMeaningfulRect, type Rect4 } from '../lib/pdf-highlight'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -11,20 +13,51 @@ const ZOOM_MAX = 4
 const ZOOM_STEP = 0.25
 const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(z.toFixed(2))))
 
-export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer; onAskSelection?: (text: string) => void }) {
+// 与 Zotero 默认标注色一致
+const HIGHLIGHT_COLORS = [
+  { name: '黄', hex: '#ffd400' },
+  { name: '绿', hex: '#5fb236' },
+  { name: '蓝', hex: '#2ea8e5' },
+  { name: '红', hex: '#ff6666' },
+  { name: '紫', hex: '#a28ae5' },
+]
+
+export default function PdfCanvas({ data, paperKey, onAskSelection }: {
+  data: ArrayBuffer
+  paperKey: string
+  onAskSelection?: (text: string) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<HTMLDivElement>(null)
   const docRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
+  const viewportsRef = useRef<Record<number, pdfjsLib.PageViewport>>({}) // 按 0 基页码存当前 viewport
   const [docVersion, setDocVersion] = useState(0) // 文档加载完成后 +1，触发页面渲染
   const [zoom, setZoom] = useState(1) // 1 = 适应宽度
   const [sel, setSel] = useState<{ x: number; y: number; text: string } | null>(null)
   // 页内搜索（Ctrl/Cmd+F）
   const searchRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
-  // 每个命中 = 该匹配覆盖的一组 span（跨 span 匹配可能不止一个）
   const [hits, setHits] = useState<HTMLElement[][]>([])
   const [cur, setCur] = useState(0)
-  const [renderTick, setRenderTick] = useState(0) // textLayer 重渲染后 +1，触发重匹配
+  const [renderTick, setRenderTick] = useState(0) // textLayer 重渲染后 +1，触发重匹配/重绘高亮
+  // 高亮标注
+  const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [color, setColor] = useState(HIGHLIGHT_COLORS[0].hex)
+  const [activeHl, setActiveHl] = useState<{ hl: Highlight; x: number; y: number } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const noteRef = useRef<HTMLTextAreaElement>(null)
+
+  const unsyncedCount = highlights.filter(h => !h.zoteroKey).length
+
+  // 载入该论文已有高亮
+  useEffect(() => {
+    let alive = true
+    setActiveHl(null)
+    window.api.listHighlights(paperKey).then(hs => { if (alive) setHighlights(hs) }).catch(() => {})
+    return () => { alive = false }
+  }, [paperKey])
 
   // Cmd/Ctrl+F：聚焦搜索框；Cmd/Ctrl + +/-/0：缩放（仅 PDF tab 打开时）
   useEffect(() => {
@@ -56,7 +89,6 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
     container.querySelectorAll('span.search-hit, span.search-hit-active').forEach(el =>
       el.classList.remove('search-hit', 'search-hit-active'))
     const matches: HTMLElement[][] = []
-    // 逐页（每个 .textLayer 一页）匹配，避免一处匹配跨页拼接
     container.querySelectorAll<HTMLElement>('.textLayer').forEach(layer => {
       const spans = [...layer.querySelectorAll<HTMLElement>('span')]
       if (spans.length === 0) return
@@ -114,7 +146,6 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
   useEffect(() => {
     let cancelled = false
     docRef.current = null
-    // data.slice(0) clones the buffer (pdf.js may transfer/detach it)
     const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) })
     loadingTask.promise
       .then((doc) => {
@@ -139,7 +170,7 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
     let cancelled = false
     ;(async () => {
       container.innerHTML = ''
-      // 清晰渲染：CSS 尺寸 = 适应宽度 × zoom，物理像素再 ×devicePixelRatio。
+      viewportsRef.current = {}
       const fitWidth = container.clientWidth || 800
       const dpr = window.devicePixelRatio || 1
       for (let i = 1; i <= doc.numPages && !cancelled; i++) {
@@ -147,9 +178,11 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
         const base = page.getViewport({ scale: 1 })
         const viewport = page.getViewport({ scale: (fitWidth / base.width) * zoom })
         const cssWidth = Math.floor(viewport.width)
+        viewportsRef.current[i - 1] = viewport
 
         const wrap = document.createElement('div')
         wrap.className = 'pdf-page-wrap'
+        wrap.dataset.pageIndex = String(i - 1)
         wrap.style.cssText = `position:relative;width:${cssWidth}px;margin:0 auto 8px;`
 
         const canvas = document.createElement('canvas')
@@ -169,7 +202,6 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
         }).promise
 
         if (!cancelled) {
-          // 文本层（CSS 尺寸 viewport，--scale-factor 对齐）
           try {
             const textDiv = document.createElement('div')
             textDiv.className = 'textLayer'
@@ -186,24 +218,64 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
           }
         }
       }
-      // textLayer 全部渲染完成 → 若有搜索词则对新 DOM 重新匹配
       if (!cancelled) setRenderTick(t => t + 1)
     })()
     return () => { cancelled = true }
   }, [zoom, docVersion])
 
-  // 触控板捏合 / ⌘(Ctrl)+滚轮 缩放：macOS 上捏合以 ctrlKey=true 的 wheel 事件到达。
-  // 累积「缩放系数」并用 setTimeout 节流提交（比 rAF 在后台窗口更可靠），
-  // setZoom 用函数式更新读取最新 zoom，避免竞态。
+  // 重绘高亮叠加层（高亮变化 / 页面重渲染后）
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    container.querySelectorAll('.pdf-hl').forEach(e => e.remove())
+    for (const hl of highlights) {
+      const wrap = container.querySelector<HTMLElement>(`.pdf-page-wrap[data-page-index="${hl.pageIndex}"]`)
+      const vp = viewportsRef.current[hl.pageIndex]
+      if (!wrap || !vp) continue
+      for (const rect of hl.rects) {
+        const box = pdfRectToBox(rect as Rect4, (r) => vp.convertToViewportRectangle(r))
+        if (!isMeaningfulRect(box)) continue
+        const div = document.createElement('div')
+        div.className = 'pdf-hl' + (hl.comment ? ' has-comment' : '')
+        div.style.cssText = `left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;background:${hl.color}`
+        div.title = hl.comment ? `📝 ${hl.comment}` : '点击编辑 / 删除'
+        div.onclick = () => {
+          const vr = viewerRef.current!.getBoundingClientRect()
+          const br = div.getBoundingClientRect()
+          setActiveHl({ hl, x: br.left - vr.left, y: br.bottom - vr.top + 4 })
+        }
+        wrap.appendChild(div)
+      }
+    }
+  }, [highlights, renderTick])
+
+  // 弹窗：点击外部 / 滚动时关闭
+  useEffect(() => {
+    if (!activeHl) return
+    const onDown = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setActiveHl(null)
+    }
+    const onScroll = () => setActiveHl(null)
+    document.addEventListener('mousedown', onDown)
+    viewerRef.current?.querySelector('.pdf-pages')?.addEventListener('scroll', onScroll, true)
+    const stage = viewerRef.current?.parentElement
+    stage?.addEventListener('scroll', onScroll)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      stage?.removeEventListener('scroll', onScroll)
+    }
+  }, [activeHl])
+
+  // 触控板捏合 / ⌘(Ctrl)+滚轮 缩放
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer) return
     let timer: ReturnType<typeof setTimeout> | undefined
     let pendingFactor = 1
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return // 普通滚动交给容器自身
-      e.preventDefault() // 阻止 Electron 默认整页缩放
-      pendingFactor *= Math.exp(-e.deltaY * 0.01) // 张开(deltaY<0)放大，捏合缩小
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      pendingFactor *= Math.exp(-e.deltaY * 0.01)
       if (timer) return
       timer = setTimeout(() => {
         timer = undefined
@@ -217,6 +289,74 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
   }, [])
 
   const clamp = clampZoom
+
+  // 由当前选区创建高亮；withNote=true 时创建后打开注释弹窗
+  async function createHighlight(withNote: boolean) {
+    const s = window.getSelection()
+    if (!s || s.rangeCount === 0) return
+    const text = s.toString().trim()
+    const range = s.getRangeAt(0)
+    const startEl = range.startContainer.nodeType === Node.TEXT_NODE
+      ? range.startContainer.parentElement
+      : (range.startContainer as HTMLElement)
+    const wrap = startEl?.closest<HTMLElement>('.pdf-page-wrap')
+    if (!wrap || !wrap.dataset.pageIndex) return
+    const pageIndex = Number(wrap.dataset.pageIndex)
+    const vp = viewportsRef.current[pageIndex]
+    if (!vp || !text) return
+    const wrapRect = wrap.getBoundingClientRect()
+    const clientRects = Array.from(range.getClientRects()).filter(r => isMeaningfulRect(r))
+    const rects: number[][] = clientRects.map(r => domRectToPdfRect(
+      { left: r.left - wrapRect.left, top: r.top - wrapRect.top, right: r.right - wrapRect.left, bottom: r.bottom - wrapRect.top },
+      (x, y) => vp.convertToPdfPoint(x, y),
+    ))
+    if (rects.length === 0) return
+    try {
+      const hl = await window.api.addHighlight({ paperKey, pageIndex, rects, text, color })
+      setHighlights(hs => [...hs, hl])
+      s.removeAllRanges()
+      setSel(null)
+      if (withNote) {
+        const vr = viewerRef.current!.getBoundingClientRect()
+        setActiveHl({ hl, x: Math.min(sel?.x ?? 40, vr.width - 280), y: (sel?.y ?? 40) + 8 })
+      }
+    } catch (e) {
+      setSyncMsg('保存高亮失败：' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  async function updateActiveHl(patch: { comment?: string | null; color?: string }) {
+    if (!activeHl) return
+    const id = activeHl.hl.id
+    await window.api.updateHighlight({ id, ...patch }).catch(() => {})
+    setHighlights(hs => hs.map(h => h.id === id ? { ...h, ...patch } : h))
+    setActiveHl(a => a && a.hl.id === id ? { ...a, hl: { ...a.hl, ...patch } } : a)
+  }
+
+  async function deleteActiveHl() {
+    if (!activeHl) return
+    const id = activeHl.hl.id
+    await window.api.deleteHighlight(id).catch(() => {})
+    setHighlights(hs => hs.filter(h => h.id !== id))
+    setActiveHl(null)
+  }
+
+  async function syncToZotero() {
+    setSyncing(true)
+    setSyncMsg(null)
+    try {
+      const { synced, failed } = await window.api.syncHighlights(paperKey)
+      setHighlights(await window.api.listHighlights(paperKey))
+      setSyncMsg(failed ? `已同步 ${synced} 条，${failed} 条失败` : `已同步 ${synced} 条到 Zotero ✓`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg(/403|write|permission/i.test(msg)
+        ? '同步失败：Zotero key 无写权限。请到 zotero.org/settings/keys 给 key 勾选「Allow write access」。'
+        : '同步失败：' + msg)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <div className="pdf-viewer" ref={viewerRef}>
@@ -236,15 +376,59 @@ export default function PdfCanvas({ data, onAskSelection }: { data: ArrayBuffer;
         <span className="pdf-search-count">{hits.length > 0 ? `${cur + 1}/${hits.length}` : '0/0'}</span>
         <button aria-label="上一个" onClick={() => moveCur(-1)} disabled={hits.length === 0}>‹</button>
         <button aria-label="下一个" onClick={() => moveCur(1)} disabled={hits.length === 0}>›</button>
-      </div>
-      <div ref={containerRef} className="pdf-pages" />
-      {sel && onAskSelection && (
+        <span className="pdf-toolbar-sep" />
+        <span className="pdf-hl-count" title="高亮标注数">🖍️ {highlights.length}</span>
         <button
-          className="ask-selection-btn"
-          style={{ position: 'absolute', left: sel.x, top: sel.y, zIndex: 5 }}
-          onMouseDown={e => e.preventDefault()}
-          onClick={() => { onAskSelection(sel.text); setSel(null) }}
-        >✨ 问这段</button>
+          className="pdf-sync-btn"
+          onClick={syncToZotero}
+          disabled={syncing || unsyncedCount === 0}
+          title="把未同步的高亮推送到 Zotero（需写权限 key）"
+        >{syncing ? '同步中…' : `同步Zotero${unsyncedCount ? ` (${unsyncedCount})` : ''}`}</button>
+      </div>
+      {syncMsg && <div className="pdf-sync-msg" role="status" onClick={() => setSyncMsg(null)}>{syncMsg}</div>}
+      <div ref={containerRef} className="pdf-pages" />
+
+      {sel && (
+        <div className="sel-toolbar" style={{ position: 'absolute', left: sel.x, top: sel.y, zIndex: 6 }}
+          onMouseDown={e => e.preventDefault()}>
+          {HIGHLIGHT_COLORS.map(c => (
+            <button
+              key={c.hex}
+              className={'sel-color' + (color === c.hex ? ' active' : '')}
+              style={{ background: c.hex }}
+              title={`高亮(${c.name})`}
+              onClick={() => { setColor(c.hex); void createHighlight(false) }}
+            />
+          ))}
+          <button className="sel-act" title="高亮并加笔记" onClick={() => createHighlight(true)}>📝</button>
+          {onAskSelection && <button className="sel-act" onClick={() => { onAskSelection(sel.text); setSel(null) }}>✨问这段</button>}
+        </div>
+      )}
+
+      {activeHl && (
+        <div className="hl-popover" ref={popoverRef}
+          style={{ position: 'absolute', left: Math.max(8, activeHl.x), top: activeHl.y, zIndex: 7 }}>
+          <div className="hl-pop-colors">
+            {HIGHLIGHT_COLORS.map(c => (
+              <button key={c.hex} className={'sel-color' + (activeHl.hl.color === c.hex ? ' active' : '')}
+                style={{ background: c.hex }} title={c.name}
+                onClick={() => updateActiveHl({ color: c.hex })} />
+            ))}
+            <span className="hl-pop-status">{activeHl.hl.zoteroKey ? '✓ 已同步' : '未同步'}</span>
+          </div>
+          <textarea
+            key={activeHl.hl.id}
+            ref={noteRef}
+            className="hl-pop-note"
+            placeholder="加条笔记（注释）…"
+            defaultValue={activeHl.hl.comment ?? ''}
+            onBlur={e => updateActiveHl({ comment: e.target.value.trim() || null })}
+          />
+          <div className="hl-pop-foot">
+            <button className="hl-pop-del" onClick={deleteActiveHl}>删除</button>
+            <button onClick={() => { void updateActiveHl({ comment: noteRef.current?.value.trim() || null }); setActiveHl(null) }}>完成</button>
+          </div>
+        </div>
       )}
     </div>
   )

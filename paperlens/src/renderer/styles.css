@@ -515,6 +515,57 @@ input::placeholder { color: var(--text-3); }
 /* 句级高亮：引用定位命中的原文 spans（黄底 3 秒渐隐由 JS 移除类完成） */
 .textLayer span.sentence-flash { background: rgba(250, 204, 21, .55); }
 
+/* ─── PDF 高亮标注 ─────────────────────────────────────────────── */
+.pdf-toolbar-sep { flex: 0 0 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
+.pdf-hl-count { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.pdf-sync-btn { font-size: 12px; padding: 3px 10px; }
+.pdf-sync-msg {
+  font-size: 12px; padding: 6px 12px; background: var(--accent-soft);
+  color: var(--text); border-bottom: 1px solid var(--border); cursor: pointer;
+}
+
+/* 叠加在文字上的高亮块（在 textLayer 之上、可点击编辑；multiply 让其像马克笔） */
+.pdf-hl {
+  position: absolute; z-index: 3; border-radius: 2px; cursor: pointer;
+  mix-blend-mode: multiply; opacity: .9; transition: outline .1s;
+}
+.pdf-hl:hover { outline: 1px solid rgba(0, 0, 0, .35); }
+.pdf-hl.has-comment { box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .35); }
+
+/* 选区浮动工具条：颜色点 + 笔记 + 问这段 */
+.sel-toolbar {
+  display: flex; align-items: center; gap: 4px; padding: 4px 6px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 8px; box-shadow: var(--shadow);
+}
+.sel-color {
+  width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff;
+  outline: 1px solid var(--border-strong); cursor: pointer; padding: 0;
+}
+.sel-color.active { outline: 2px solid var(--accent); }
+.sel-act {
+  font-size: 12px; padding: 3px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; white-space: nowrap;
+}
+.sel-act:hover { background: var(--accent-soft); }
+
+/* 高亮编辑弹窗 */
+.hl-popover {
+  width: 260px; background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 10px; display: flex;
+  flex-direction: column; gap: 8px;
+}
+.hl-pop-colors { display: flex; align-items: center; gap: 6px; }
+.hl-pop-status { margin-left: auto; font-size: 11px; color: var(--text-3); }
+.hl-pop-note {
+  width: 100%; min-height: 56px; resize: vertical; font-size: 13px;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-family: inherit; box-sizing: border-box;
+}
+.hl-pop-foot { display: flex; justify-content: space-between; }
+.hl-pop-foot button { font-size: 12px; padding: 3px 12px; }
+.hl-pop-del { color: #b91c1c; border-color: #f0c9c9 !important; }
+
 /* ─── 知识库·自动综述 ─────────────────────────────────────────── */
 .kb-review { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .kb-review-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
