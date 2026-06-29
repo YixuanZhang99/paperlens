@@ -57,15 +57,22 @@ export function createContainer() {
   const ai = (opts?: { deepThink?: boolean }) => {
     const c = cfg()
     if (c.aiProvider === 'kimi') {
+      // Kimi(kimi-for-coding) 原生返回 reasoning_content，不传 thinking 字段
       return createAiChat({
         apiKey: c.kimiApiKey,
         model: c.kimiModel || 'moonshot-v1-32k',
         baseUrl: c.kimiBaseUrl || 'https://api.moonshot.cn/v1',
         fetch,
-        deepThink: opts?.deepThink,
       })
     }
-    return createAiChat({ apiKey: c.deepseekApiKey, model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com', fetch, deepThink: opts?.deepThink })
+    // DeepSeek：v4-flash + thinking 开关（deepseek-chat/reasoner 2026-07-24 弃用）。深思 = thinking.enabled
+    return createAiChat({
+      apiKey: c.deepseekApiKey,
+      model: 'deepseek-v4-flash',
+      baseUrl: 'https://api.deepseek.com',
+      fetch,
+      thinking: { type: opts?.deepThink ? 'enabled' : 'disabled' },
+    })
   }
   const notion = () => createNotionSync({ token: cfg().notionToken, databaseId: cfg().notionDatabaseId, fetch })
   const zoteroLocal = () => createZoteroLocal({

@@ -186,6 +186,20 @@ describe('createAiChat.complete', () => {
     await expect(chat.complete([{ role: 'user', content: 'x' }])).rejects.toThrow(/DeepSeek.*401/)
   })
 
+  it('sends thinking when provided (DeepSeek 深思=enabled), drops it otherwise', async () => {
+    const mk = () => vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }))
+    const f1 = mk()
+    await createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', thinking: { type: 'enabled' }, fetch: f1 }).complete([{ role: 'user', content: 'q' }])
+    expect(JSON.parse((f1.mock.calls[0]![1] as RequestInit).body as string).thinking).toEqual({ type: 'enabled' })
+    const f2 = mk()
+    await createAiChat({ apiKey: 'k', model: 'deepseek-v4-flash', thinking: { type: 'disabled' }, fetch: f2 }).complete([{ role: 'user', content: 'q' }])
+    expect(JSON.parse((f2.mock.calls[0]![1] as RequestInit).body as string).thinking).toEqual({ type: 'disabled' })
+    const f3 = mk()
+    await createAiChat({ apiKey: 'k', fetch: f3 }).complete([{ role: 'user', content: 'q' }]) // 无 thinking → 不发
+    expect(JSON.parse((f3.mock.calls[0]![1] as RequestInit).body as string).thinking).toBeUndefined()
+  })
+
   it('routes to a custom provider (Kimi/Moonshot): baseUrl + model honored', async () => {
     const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '你好' } }] }), { status: 200 }))

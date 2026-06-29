@@ -31,14 +31,16 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   if (!cfg) return null
 
   const renderField = (f: Field) => (
-    <label key={f.key}>
-      <span>{f.label}</span>
-      <input
-        type={f.secret ? 'password' : 'text'}
-        value={(cfg[f.key] as string) ?? ''}
-        onChange={e => setCfg({ ...cfg, [f.key]: e.target.value })} />
+    <div className="settings-field" key={f.key}>
+      <label>
+        <span>{f.label}</span>
+        <input
+          type={f.secret ? 'password' : 'text'}
+          value={(cfg[f.key] as string) ?? ''}
+          onChange={e => setCfg({ ...cfg, [f.key]: e.target.value })} />
+      </label>
       {f.hint && <small className="settings-hint">{f.hint}</small>}
-    </label>
+    </div>
   )
 
   return (

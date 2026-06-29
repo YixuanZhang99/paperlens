@@ -29,7 +29,7 @@ describe.skipIf(!E.DEEPSEEK_API_KEY)('REAL AI-capabilities smoke', () => {
     const ai = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-v4-flash', fetch })
 
     // ---- 1) REAL deep-think (thinking.type=enabled): reasoning_content must arrive as kind='reasoning' ----
-    const reasoner = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-v4-flash', fetch, deepThink: true })
+    const reasoner = createAiChat({ apiKey: E.DEEPSEEK_API_KEY!, model: 'deepseek-v4-flash', fetch, thinking: { type: 'enabled' } })
     let reasoningTokens = 0
     let contentTokens = 0
     let firstContentAfterReasoning = false

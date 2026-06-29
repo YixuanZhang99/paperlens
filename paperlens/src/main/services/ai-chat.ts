@@ -68,17 +68,16 @@ export interface AiChatDeps {
   model?: string
   fetch: typeof fetch
   baseUrl?: string
-  /** 深思模式：true → thinking.type=enabled（流式回传 reasoning_content + content）；
-   *  缺省/false → thinking.type=disabled（仅 content）。对应旧版 deepseek-reasoner 与
-   *  deepseek-chat 的区别，可观察行为不变。 */
-  deepThink?: boolean
+  /** DeepSeek(v4) 思考模式：enabled → 流式回传 reasoning_content + content；disabled → 仅 content。
+   *  仅 DeepSeek 传此字段；Kimi 等其它 OpenAI 兼容后端不传（其原生返回思维链）。 */
+  thinking?: { type: 'enabled' | 'disabled' }
 }
 
 export function createAiChat(deps: AiChatDeps) {
   const url = `${deps.baseUrl ?? 'https://api.deepseek.com'}/chat/completions`
-  // 模型可配置：DeepSeek 走 deepseek-chat，Kimi 走 moonshot-*/kimi-*（均 OpenAI 兼容）
+  // 模型可配置：DeepSeek 走 deepseek-v4-flash，Kimi 走 kimi-for-coding 等（均 OpenAI 兼容）
   const model = deps.model || 'deepseek-chat'
-  const thinking: { type: 'enabled' | 'disabled' } | undefined = undefined // 不发 thinking，JSON.stringify 自动丢弃 undefined
+  const thinking = deps.thinking // 仅 DeepSeek 传；undefined 时 JSON.stringify 自动丢弃
 
   async function complete(messages: ChatMessage[]): Promise<string> {
     const res = await deps.fetch(url, {

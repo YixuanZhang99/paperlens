@@ -309,7 +309,7 @@ export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Pap
               }
             }}
           />
-          <label className="deepthink-label">
+          <label className="deepthink-label" title="开启后让 AI 先推理再作答（更慢更细）。对 DeepSeek 生效；Kimi 默认已内置深度思考。">
             <input type="checkbox" checked={deepThink} onChange={e => setDeepThink(e.target.checked)} />深思
           </label>
           {busy ? (

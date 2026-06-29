@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SettingsView } from '../../src/renderer/components/SettingsView'
 
-const empty = { zoteroApiKey: '', zoteroUserId: '', zoteroDataDir: '', deepseekApiKey: '', deepseekModel: 'deepseek-v4-flash', notionToken: '', notionDatabaseId: '' }
+const empty = { aiProvider: 'deepseek', zoteroApiKey: '', zoteroUserId: '', zoteroDataDir: '', deepseekApiKey: '', deepseekModel: 'deepseek-v4-flash', kimiApiKey: '', kimiModel: '', kimiBaseUrl: '', notionToken: '', notionDatabaseId: '' }
 
 describe('SettingsView', () => {
   it('loads existing config and saves edits', async () => {
@@ -10,8 +10,8 @@ describe('SettingsView', () => {
     ;(window as any).api = { getConfig: vi.fn(async () => empty), setConfig }
     render(<SettingsView onClose={vi.fn()} />)
 
-    fireEvent.change(await screen.findByLabelText(/Zotero User ID/), { target: { value: '42' } })
-    fireEvent.change(screen.getByLabelText(/Zotero API Key/), { target: { value: 'zk' } })
+    fireEvent.change(await screen.findByLabelText(/User ID/), { target: { value: '42' } })
+    fireEvent.change(screen.getByLabelText('API Key', { exact: true }), { target: { value: 'zk' } })
     fireEvent.click(screen.getByRole('button', { name: /保存/ }))
 
     await waitFor(() => expect(setConfig).toHaveBeenCalledWith(
@@ -35,7 +35,7 @@ describe('SettingsView', () => {
     const setConfig = vi.fn(async (p: any) => ({ ...empty, ...p }))
     ;(window as any).api = { getConfig: vi.fn(async () => empty), setConfig }
     render(<SettingsView onClose={vi.fn()} />)
-    fireEvent.change(await screen.findByLabelText(/Zotero 数据目录/), { target: { value: '/Users/me/Zotero' } })
+    fireEvent.change(await screen.findByLabelText(/数据目录/), { target: { value: '/Users/me/Zotero' } })
     fireEvent.click(screen.getByRole('button', { name: /保存/ }))
     await waitFor(() => expect(setConfig).toHaveBeenCalledWith(
       expect.objectContaining({ zoteroDataDir: '/Users/me/Zotero' })
