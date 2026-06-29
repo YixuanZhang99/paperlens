@@ -9,9 +9,9 @@ const FIELDS: Array<{ key: keyof AppConfig; label: string; secret?: boolean; pro
   { key: 'zoteroDataDir', label: 'Zotero 数据目录（留空=默认 ~/Zotero）' },
   { key: 'deepseekApiKey', label: 'DeepSeek API Key', secret: true, provider: 'deepseek' },
   { key: 'deepseekModel', label: 'DeepSeek Model', provider: 'deepseek' },
-  { key: 'kimiApiKey', label: 'Kimi API Key（platform.moonshot.cn 获取）', secret: true, provider: 'kimi' },
-  { key: 'kimiModel', label: 'Kimi 模型（如 moonshot-v1-32k / kimi-k2-…）', provider: 'kimi' },
-  { key: 'kimiBaseUrl', label: 'Kimi 接口地址（默认 https://api.moonshot.cn/v1；海外用 .ai）', provider: 'kimi' },
+  { key: 'kimiApiKey', label: 'Kimi API Key（Kimi Code: kimi.com/code 控制台；Moonshot: platform.moonshot.cn）', secret: true, provider: 'kimi' },
+  { key: 'kimiModel', label: 'Kimi 模型（Kimi Code 填 kimi-for-coding；Moonshot 填 moonshot-v1-32k 等）', provider: 'kimi' },
+  { key: 'kimiBaseUrl', label: 'Kimi 接口地址（Kimi Code: https://api.kimi.com/coding/v1；Moonshot: https://api.moonshot.cn/v1）', provider: 'kimi' },
   { key: 'notionToken', label: 'Notion Token', secret: true },
   { key: 'notionDatabaseId', label: 'Notion Database ID' },
 ]
