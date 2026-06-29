@@ -3,15 +3,14 @@ import { join } from 'node:path'
 import { createContainer } from './container'
 import { registerIpc } from './ipc'
 
-// 全屏时菜单栏/标题栏会从顶部滑下，盖住应用自身的顶栏按钮。
-// 这里按主显示器算出菜单栏高度，再加标题栏高度，作为全屏顶部安全留白。
+// 全屏时菜单栏会占据/盖住顶部，盖住应用自身的顶栏按钮（全屏下没有标题栏）。
+// 只需留「正好等于菜单栏高度」的安全区即可，多留就会空出一条。
 function fullscreenInset(): number {
   try {
     const d = screen.getPrimaryDisplay()
-    const menuBar = Math.max(0, Math.round(d.workArea.y - d.bounds.y))
-    return menuBar + 28 // 28 ≈ 标题栏滑下高度
+    return Math.max(0, Math.round(d.workArea.y - d.bounds.y)) // 菜单栏高度
   } catch {
-    return 52
+    return 24
   }
 }
 
