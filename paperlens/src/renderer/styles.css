@@ -140,8 +140,22 @@ input::placeholder { color: var(--text-3); }
 .nav-scroll { flex: 1; overflow: auto; }
 
 /* ─── 文件夹树（Zotero collections）──────────────────────────── */
+/* 当前文件夹（一行，可展开/收起树）。收起时论文列表直接顶在上方，无需下滑。 */
+.folder-current {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: calc(100% - 16px); margin: 8px 8px 0; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600;
+}
+.folder-current:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-strong); }
+.folder-current:disabled { opacity: 1; cursor: default; }
+.folder-current-name { display: flex; align-items: center; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.folder-chevron { flex: none; color: var(--text-3); font-size: 11px; transition: transform .15s; }
+.folder-current.open .folder-chevron { transform: rotate(180deg); }
+
 .folder-tree, .folder-children { list-style: none; margin: 0; padding: 0; }
-.folder-tree { padding: 8px 8px 4px; }
+/* 展开的树限高，文件夹很多时也不会把论文挤太远；自身滚动 */
+.folder-tree { padding: 6px 8px 4px; max-height: 44vh; overflow: auto; }
 .folder-row {
   display: block; width: 100%; text-align: left;
   border: none; background: transparent;

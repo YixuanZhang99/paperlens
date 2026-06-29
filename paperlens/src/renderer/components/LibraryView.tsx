@@ -6,6 +6,7 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const [selectedCol, setSelectedCol] = useState<string | null>(null)
   const [papers, setPapers] = useState<Paper[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [treeOpen, setTreeOpen] = useState(false) // 文件夹树默认收起，让论文顶在上方
 
   useEffect(() => {
     // 文件夹加载失败不阻塞论文列表（无 collections 时仅显示「全部论文」）
@@ -18,6 +19,11 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   }, [selectedCol])
 
   const childrenOf = (key: string | null) => collections.filter(c => c.parentKey === key)
+  const hasFolders = collections.length > 0
+  const currentName = selectedCol === null ? '全部论文' : (collections.find(c => c.key === selectedCol)?.name ?? '全部论文')
+
+  // 选择文件夹后自动收起树，论文立即弹到上方
+  const pickCol = (key: string | null) => { setSelectedCol(key); setTreeOpen(false) }
 
   function renderFolder(c: ZoteroCollection, depth: number) {
     const kids = childrenOf(c.key)
@@ -26,7 +32,7 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
         <button
           className={'folder-row' + (selectedCol === c.key ? ' selected' : '')}
           style={{ paddingLeft: 12 + depth * 16 }}
-          onClick={() => setSelectedCol(c.key)}
+          onClick={() => pickCol(c.key)}
         >
           <span className="folder-icon">{selectedCol === c.key ? '📂' : '📁'}</span>{c.name}
         </button>
@@ -37,17 +43,31 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
 
   return (
     <div className="library">
-      <ul className="folder-tree">
-        <li>
-          <button
-            className={'folder-row' + (selectedCol === null ? ' selected' : '')}
-            onClick={() => setSelectedCol(null)}
-          >
-            <span className="folder-icon">📚</span>全部论文
-          </button>
-        </li>
-        {childrenOf(null).map(c => renderFolder(c, 0))}
-      </ul>
+      {/* 当前文件夹（一行）：点击展开/收起文件夹树 */}
+      <button
+        className={'folder-current' + (treeOpen ? ' open' : '')}
+        onClick={() => hasFolders && setTreeOpen(o => !o)}
+        disabled={!hasFolders}
+        title={hasFolders ? '切换文件夹' : undefined}
+      >
+        <span className="folder-current-name">
+          <span className="folder-icon">{selectedCol === null ? '📚' : '📂'}</span>{currentName}
+        </span>
+        {hasFolders && <span className="folder-chevron">▾</span>}
+      </button>
+      {treeOpen && (
+        <ul className="folder-tree">
+          <li>
+            <button
+              className={'folder-row' + (selectedCol === null ? ' selected' : '')}
+              onClick={() => pickCol(null)}
+            >
+              <span className="folder-icon">📚</span>全部论文
+            </button>
+          </li>
+          {childrenOf(null).map(c => renderFolder(c, 0))}
+        </ul>
+      )}
       <div className="lib-section">论文{papers.length > 0 ? ` · ${papers.length}` : ''}</div>
       {error ? (
         <div role="alert" className="alert-banner" style={{ margin: 12 }}>{error}</div>
