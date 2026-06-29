@@ -55,8 +55,8 @@ button {
   cursor: pointer;
   transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 }
-button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text-3); }
-button:active:not(:disabled) { transform: translateY(0.5px); }
+button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text-3); box-shadow: 0 1px 2px rgba(27, 31, 36, .07); }
+button:active:not(:disabled) { transform: translateY(0.5px); box-shadow: none; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -181,12 +181,21 @@ input::placeholder { color: var(--text-3); }
 
 /* ─── 阅读栏 ──────────────────────────────────────────────────── */
 .reader { padding: 20px 24px; height: 100%; display: flex; flex-direction: column; }
-.reader-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-.reader-tabs button { border-radius: 999px; padding: 5px 16px; }
+/* 分段控件：一个胶囊容器内切换，激活段填品牌色 */
+.reader-tabs {
+  display: inline-flex; gap: 2px; margin-bottom: 16px; width: fit-content;
+  padding: 3px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.reader-tabs button {
+  border: none; background: transparent; color: var(--text-2);
+  border-radius: 999px; padding: 5px 18px; font-weight: 500;
+}
+.reader-tabs button:hover:not(:disabled) { background: var(--surface); color: var(--text); border: none; }
 .reader-tabs button:disabled {
   opacity: 1;
-  background: var(--text); color: #fff; border-color: var(--text);
-  font-weight: 600;
+  background: var(--accent); color: #fff;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, .3);
 }
 .reader-title { margin: 0 0 4px; font-size: 20px; line-height: 1.35; letter-spacing: -.2px; }
 .reader-authors {
@@ -240,14 +249,19 @@ input::placeholder { color: var(--text-3); }
 .pdf-stage { flex: 1; overflow: auto; border-radius: var(--radius); }
 .pdf-toolbar {
   position: sticky; top: 0; z-index: 2;
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 8px; margin-bottom: 8px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); box-shadow: 0 1px 3px rgba(27,31,36,.06);
-  width: fit-content;
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  width: fit-content; max-width: 100%;
 }
-.pdf-toolbar button { padding: 3px 11px; font-size: 14px; line-height: 1.3; }
-.pdf-zoom-pct { font-size: 12px; color: var(--text-2); min-width: 42px; text-align: center; }
+.pdf-toolbar button { padding: 4px 10px; font-size: 13px; line-height: 1.2; }
+/* −,＋,‹,› 等图标按钮做成等宽方形，视觉整齐 */
+.pdf-toolbar button[aria-label] {
+  width: 28px; height: 28px; padding: 0; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pdf-zoom-pct { font-size: 12px; color: var(--text-2); min-width: 44px; text-align: center; }
 .pdf-pages { min-width: fit-content; }
 
 /* ─── 对话栏 ──────────────────────────────────────────────────── */
@@ -516,9 +530,14 @@ input::placeholder { color: var(--text-3); }
 .textLayer span.sentence-flash { background: rgba(250, 204, 21, .55); }
 
 /* ─── PDF 高亮标注 ─────────────────────────────────────────────── */
-.pdf-toolbar-sep { flex: 0 0 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
-.pdf-hl-count { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-.pdf-sync-btn { font-size: 12px; padding: 3px 10px; }
+.pdf-toolbar-sep { flex: 0 0 1px; align-self: stretch; background: var(--border); margin: 4px 2px; }
+.pdf-hl-count { font-size: 12px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; }
+.pdf-sync-btn { font-size: 12.5px; padding: 4px 12px; }
+.pdf-sync-btn:not(:disabled) {
+  background: var(--accent-soft); border-color: var(--accent-border);
+  color: var(--accent); font-weight: 500;
+}
+.pdf-sync-btn:not(:disabled):hover { background: #e2e6fd; border-color: var(--accent); }
 .pdf-sync-msg {
   font-size: 12px; padding: 6px 12px; background: var(--accent-soft);
   color: var(--text); border-bottom: 1px solid var(--border); cursor: pointer;
@@ -539,9 +558,11 @@ input::placeholder { color: var(--text-3); }
   border-radius: 8px; box-shadow: var(--shadow);
 }
 .sel-color {
-  width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff;
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff;
   outline: 1px solid var(--border-strong); cursor: pointer; padding: 0;
+  transition: transform .1s, outline-color .1s;
 }
+.sel-color:hover { transform: scale(1.18); }
 .sel-color.active { outline: 2px solid var(--accent); }
 .sel-act {
   font-size: 12px; padding: 3px 8px; border-radius: 6px;
@@ -551,9 +572,9 @@ input::placeholder { color: var(--text-3); }
 
 /* 高亮编辑弹窗 */
 .hl-popover {
-  width: 260px; background: var(--surface); border: 1px solid var(--border-strong);
-  border-radius: 10px; box-shadow: var(--shadow); padding: 10px; display: flex;
-  flex-direction: column; gap: 8px;
+  width: 264px; background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 12px; box-shadow: var(--shadow-lg); padding: 12px; display: flex;
+  flex-direction: column; gap: 9px;
 }
 .hl-pop-colors { display: flex; align-items: center; gap: 6px; }
 .hl-pop-status { margin-left: auto; font-size: 11px; color: var(--text-3); }
