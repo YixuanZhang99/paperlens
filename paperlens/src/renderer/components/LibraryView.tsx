@@ -48,7 +48,7 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
         </li>
         {childrenOf(null).map(c => renderFolder(c, 0))}
       </ul>
-      <div className="lib-divider" />
+      <div className="lib-section">论文{papers.length > 0 ? ` · ${papers.length}` : ''}</div>
       {error ? (
         <div role="alert" className="alert-banner" style={{ margin: 12 }}>{error}</div>
       ) : (
@@ -61,7 +61,10 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
               className={'paper-item' + (p.key === selectedKey ? ' selected' : '')}
             >
               <div className="paper-title">{p.title}</div>
-              <div className="paper-meta">{p.authors.join(', ')}{p.year ? ` · ${p.year}` : ''}</div>
+              <div className="paper-meta">
+                {p.authors.length > 0 && <span className="paper-authors-inline">{p.authors.join(', ')}</span>}
+                {p.year ? <span className="paper-year">{p.year}</span> : null}
+              </div>
             </li>
           ))}
         </ul>
