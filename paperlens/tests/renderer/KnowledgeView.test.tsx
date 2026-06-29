@@ -17,6 +17,7 @@ const baseApi = () => ({
     ({ id: 'n9', paperKey: 'P1', content: '', tags: [], createdAt: 3, notionPageId: null })),
   kbAsk: vi.fn(),
   kbReview: vi.fn(),
+  syncNote: vi.fn(async () => 'notion-pg-1'),
 })
 
 // 标准 kbAsk mock：流式两段 token 后 resolve 含 chunks 的来源
@@ -160,6 +161,21 @@ describe('KnowledgeView', () => {
     await waitFor(() => expect(api.kbAsk).toHaveBeenCalledTimes(2))
     expect(api.kbAsk.mock.calls[1][0].question).toBe('它们效果如何？')
     expect(api.kbAsk.mock.calls[1][0].collectionKey).toBe('C1')
+  })
+
+  it('syncs a KB note to Notion with full paper metadata and then shows the synced badge', async () => {
+    const api = baseApi()
+    let synced = false
+    api.syncNote = vi.fn(async () => { synced = true; return 'pg1' })
+    api.listAllNotes = vi.fn(async () => synced ? notes.map(n => (n.id === 'n1' ? { ...n, notionPageId: 'pg1' } : n)) : notes)
+    ;(window as any).api = api
+    render(<KnowledgeView onOpenPaper={vi.fn()} />)
+    const card = (await screen.findByText('关于RLHF的笔记')).closest('li') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: /同步到 Notion/ }))
+    // 传完整 Paper（非仅标题）给 notes:sync
+    await waitFor(() => expect(api.syncNote).toHaveBeenCalledWith({ noteId: 'n1', paper: expect.objectContaining({ key: 'P1', title: 'RLHF 论文' }) }))
+    // 同步后显示徽标
+    await waitFor(() => expect(screen.getByText(/已同步 Notion/)).toBeInTheDocument())
   })
 
   it('note cards show paper title + date, two-step delete, open-paper button, no card-level navigation', async () => {

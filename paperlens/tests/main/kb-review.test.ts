@@ -17,9 +17,10 @@ function seeded() {
 }
 
 describe('representativeChunks', () => {
-  it('returns first k chunks ordered by seq', () => {
+  it('samples head/middle/tail evenly across the paper (not just the head)', () => {
     const db = seeded()
-    expect(representativeChunks(db, 'P1', 3)).toEqual(['段0 摘要', '段1 引言', '段2 方法'])
+    // 5 块取 3：seq 0、2、4（首/中/尾），而非开头 3 块
+    expect(representativeChunks(db, 'P1', 3)).toEqual(['段0 摘要', '段2 方法', '段4 结论'])
   })
   it('returns all chunks when fewer than k', () => {
     const db = seeded()

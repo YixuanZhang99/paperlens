@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChatMessage, Note, ZoteroCollection } from '@shared/types'
+import type { ChatMessage, Note, Paper, ZoteroCollection } from '@shared/types'
 import { Markdown } from './Markdown'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -25,7 +25,8 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
   const [tab, setTabState] = useState<'notes' | 'index'>(() =>
     localStorage.getItem('pl.kb.tab') === 'index' ? 'index' : 'notes')
   const [notes, setNotes] = useState<Note[]>([])
-  const [paperTitles, setPaperTitles] = useState<Map<string, string>>(new Map())
+  const [papersByKey, setPapersByKey] = useState<Map<string, Paper>>(new Map())
+  const [syncing, setSyncing] = useState<string | null>(null)
   const [keyword, setKeyword] = useState(() => localStorage.getItem('pl.kb.keyword') ?? '')
   const [activeTag, setActiveTag] = useState<string | null>(() => localStorage.getItem('pl.kb.tag') || null)
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
@@ -47,7 +48,7 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
     window.api.listAllNotes().then(setNotes).catch(() => {})
     window.api.kbStatus().then(setStatus).catch(() => {})
     window.api.listPapers().catch(() => [])
-      .then(ps => setPaperTitles(new Map(ps.map(p => [p.key, p.title]))))
+      .then(ps => setPapersByKey(new Map(ps.map(p => [p.key, p]))))
     window.api.listCollections().catch(() => []).then(setCollections)
     runIndex() // 打开即后台增量索引（已索引的论文会秒过）
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,6 +188,20 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
     }
   }
 
+  // 把知识库笔记（含存下来的 KB 问答/综述）同步到 Notion（需该论文元数据）
+  async function syncNoteToNotion(noteId: string, paperKey: string) {
+    const paper = papersByKey.get(paperKey)
+    if (!paper) { setError('未找到该论文的元数据，无法同步 Notion'); return }
+    if (syncing) return
+    setError(null); setSyncing(noteId)
+    try {
+      await window.api.syncNote({ noteId, paper })
+      setNotes(await window.api.listAllNotes())
+    } catch (e) {
+      setError('同步到 Notion 失败：' + errMsg(e))
+    } finally { setSyncing(null) }
+  }
+
   async function deleteNote(id: string) {
     try {
       await window.api.deleteNote(id)
@@ -321,7 +336,7 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
             {filtered.map(n => (
               <li key={n.id} className="note-card kb-note">
                 <div className="kb-note-meta">
-                  <span>{paperTitles.get(n.paperKey) ?? n.paperKey}</span>
+                  <span>{papersByKey.get(n.paperKey)?.title ?? n.paperKey}</span>
                   <span>{new Date(n.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="kb-note-body"><Markdown>{n.content}</Markdown></div>
@@ -330,6 +345,13 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
                     <div className="note-tags">{n.tags.map(t => <span key={t} className="tag-chip">{t}</span>)}</div>
                   )}
                   <button onClick={e => { e.stopPropagation(); onOpenPaper(n.paperKey) }}>打开论文 →</button>
+                  {n.notionPageId
+                    ? <span className="synced-badge">✓ 已同步 Notion</span>
+                    : <button
+                        onClick={e => { e.stopPropagation(); syncNoteToNotion(n.id, n.paperKey) }}
+                        disabled={syncing === n.id}>
+                        {syncing === n.id ? '同步中…' : '同步到 Notion'}
+                      </button>}
                   <button
                     className={confirmDel === n.id ? 'btn-danger' : ''}
                     onClick={e => {

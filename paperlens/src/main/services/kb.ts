@@ -210,10 +210,20 @@ export function buildKbFollowupMessages(lastAnswer: string): ChatMessage[] {
 }
 
 // 综述 map 阶段取材：论文开头的 chunk（摘要/引言）最能代表全文
+// 综述取材：首/中/尾均匀采样（而非只取开头），让 k 个片段覆盖摘要+方法+结论，代表性更强。
 export function representativeChunks(db: DatabaseType.Database, paperKey: string, k = 3): string[] {
+  const n = (db.prepare('SELECT COUNT(*) AS n FROM chunks WHERE paper_key = ?').get(paperKey) as { n: number }).n
+  if (n === 0) return []
+  if (n <= k) {
+    const rows = db.prepare('SELECT text FROM chunks WHERE paper_key = ? ORDER BY seq ASC').all(paperKey) as Array<{ text: string }>
+    return rows.map(r => r.text)
+  }
+  // 均匀取 k 个 seq（含首、尾），去重后按 seq 取文本
+  const seqs = [...new Set(Array.from({ length: k }, (_, i) => Math.round((i * (n - 1)) / (k - 1))))]
+  const ph = seqs.map(() => '?').join(',')
   const rows = db.prepare(
-    'SELECT text FROM chunks WHERE paper_key = ? ORDER BY seq ASC LIMIT ?'
-  ).all(paperKey, k) as Array<{ text: string }>
+    `SELECT seq, text FROM chunks WHERE paper_key = ? AND seq IN (${ph}) ORDER BY seq ASC`
+  ).all(paperKey, ...seqs) as Array<{ seq: number; text: string }>
   return rows.map(r => r.text)
 }
 
