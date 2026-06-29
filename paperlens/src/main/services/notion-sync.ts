@@ -1,19 +1,34 @@
 import type { Note, Paper } from '@shared/types'
 
-const txt = (content: string) => [{ text: { content } }]
+// Notion API 长度/格式上限（超限会整请求 400）
+const MAX_TEXT = 2000   // rich_text / title 单段 content ≤ 2000 字符
+const MAX_BLOCKS = 100  // 单次创建 page 的 children block ≤ 100
+const MAX_TAG = 100     // multi_select 选项名 ≤ 100 字符
+
+const clamp = (s: string, max = MAX_TEXT) => (s.length > max ? s.slice(0, max) : s)
+const txt = (content: string) => [{ text: { content: clamp(content) } }]
+// multi_select 选项名：不能含逗号(会被拆/400)、≤100 字、非空
+const toTagOption = (name: string) => clamp(name.replace(/,/g, ' '), MAX_TAG).trim()
 
 export function noteToNotionPage(note: Note, paper: Paper, databaseId: string) {
   const properties: Record<string, any> = {
     Title: { title: txt(paper.title) },
     Authors: { rich_text: txt(paper.authors.join(', ')) },
-    Tags: { multi_select: note.tags.map(name => ({ name })) },
+    Tags: { multi_select: note.tags.map(toTagOption).filter(Boolean).map(name => ({ name })) },
   }
-  if (paper.year !== null) properties.Year = { number: paper.year }
+  // Year 必须是合法有限整数，否则 Notion number 校验失败
+  if (paper.year !== null && Number.isFinite(paper.year) && Number.isInteger(paper.year)) {
+    properties.Year = { number: paper.year }
+  }
 
-  // Notion 限制单个 rich_text 内容 ≤2000 字符——长笔记按 2000 切成多个段落块
-  const chunks: string[] = []
-  for (let i = 0; i < note.content.length; i += 2000) chunks.push(note.content.slice(i, i + 2000))
+  // 正文按 2000 切成多个段落块；总块数封顶 100，超出截断并提示
+  let chunks: string[] = []
+  for (let i = 0; i < note.content.length; i += MAX_TEXT) chunks.push(note.content.slice(i, i + MAX_TEXT))
   if (chunks.length === 0) chunks.push('')
+  if (chunks.length > MAX_BLOCKS) {
+    chunks = chunks.slice(0, MAX_BLOCKS - 1)
+    chunks.push('（内容较长，已截断；完整内容见 PaperLens 应用内笔记）')
+  }
 
   return {
     parent: { database_id: databaseId },

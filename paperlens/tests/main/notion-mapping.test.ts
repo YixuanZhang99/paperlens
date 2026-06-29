@@ -39,4 +39,41 @@ describe('noteToNotionPage', () => {
     const joined = page.children.map((b) => b.paragraph.rich_text[0].text.content).join('')
     expect(joined).toBe(longNote.content)
   })
+
+  it('clamps over-long Authors to ≤2000 chars (the reported 400)', () => {
+    const many = { ...paper, authors: Array.from({ length: 200 }, (_, i) => `Author Number ${i} Longname`) }
+    const page = noteToNotionPage(note, many, 'db-123')
+    expect(page.properties.Authors.rich_text[0].text.content.length).toBeLessThanOrEqual(2000)
+  })
+
+  it('clamps over-long Title to ≤2000 chars', () => {
+    const page = noteToNotionPage(note, { ...paper, title: 'T'.repeat(2500) }, 'db-123')
+    expect(page.properties.Title.title[0].text.content.length).toBe(2000)
+  })
+
+  it('sanitizes tags: strips commas, caps at 100 chars, drops empties', () => {
+    const t = { ...note, tags: ['机器学习,深度学习', 'x'.repeat(150), '   ', 'ok'] }
+    const page = noteToNotionPage(t, paper, 'db-123')
+    const names = page.properties.Tags.multi_select.map((o: any) => o.name)
+    expect(names).not.toContain('') // 空标签被过滤
+    expect(names.some((n: string) => n.includes(','))).toBe(false) // 无逗号
+    expect(names.every((n: string) => n.length <= 100)).toBe(true) // ≤100
+    expect(names).toContain('ok')
+    expect(names).toContain('机器学习 深度学习') // 逗号→空格
+  })
+
+  it('omits Year when not a finite integer (NaN/Infinity/float)', () => {
+    for (const bad of [NaN, Infinity, -Infinity, 2017.5]) {
+      const page = noteToNotionPage(note, { ...paper, year: bad as number }, 'db-123')
+      expect(page.properties.Year).toBeUndefined()
+    }
+    expect(noteToNotionPage(note, { ...paper, year: 2017 }, 'db-123').properties.Year.number).toBe(2017)
+  })
+
+  it('caps children blocks at 100 for very long notes (Notion block limit)', () => {
+    const huge = { ...note, content: 'A'.repeat(2000 * 150) } // 150 块原始
+    const page = noteToNotionPage(huge, paper, 'db-123')
+    expect(page.children.length).toBeLessThanOrEqual(100)
+    expect(page.children.at(-1)!.paragraph.rich_text[0].text.content).toContain('已截断')
+  })
 })
