@@ -7,6 +7,7 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const [papers, setPapers] = useState<Paper[]>([])
   const [error, setError] = useState<string | null>(null)
   const [treeOpen, setTreeOpen] = useState(false) // 文件夹树默认收起，让论文顶在上方
+  const [filter, setFilter] = useState('') // 论文即时筛选（标题/作者/年份）
 
   useEffect(() => {
     // 文件夹加载失败不阻塞论文列表（无 collections 时仅显示「全部论文」）
@@ -21,6 +22,15 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const childrenOf = (key: string | null) => collections.filter(c => c.parentKey === key)
   const hasFolders = collections.length > 0
   const currentName = selectedCol === null ? '全部论文' : (collections.find(c => c.key === selectedCol)?.name ?? '全部论文')
+
+  // 即时筛选：标题 / 作者 / 年份，大小写不敏感
+  const q = filter.trim().toLowerCase()
+  const shown = q
+    ? papers.filter(p =>
+        p.title.toLowerCase().includes(q) ||
+        p.authors.join(', ').toLowerCase().includes(q) ||
+        String(p.year ?? '').includes(q))
+    : papers
 
   // 选择文件夹后自动收起树，论文立即弹到上方
   const pickCol = (key: string | null) => { setSelectedCol(key); setTreeOpen(false) }
@@ -68,13 +78,26 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
           {childrenOf(null).map(c => renderFolder(c, 0))}
         </ul>
       )}
-      <div className="lib-section">论文{papers.length > 0 ? ` · ${papers.length}` : ''}</div>
+      {papers.length > 0 && (
+        <div className="lib-filter">
+          <span className="lib-filter-icon">🔍</span>
+          <input
+            className="lib-filter-input"
+            placeholder="筛选论文（标题 / 作者 / 年份）"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+          />
+          {filter && <button className="lib-filter-clear" aria-label="清除筛选" onClick={() => setFilter('')}>×</button>}
+        </div>
+      )}
+      <div className="lib-section">论文{shown.length > 0 ? ` · ${shown.length}` : ''}{q && papers.length > 0 ? ` / ${papers.length}` : ''}</div>
       {error ? (
         <div role="alert" className="alert-banner" style={{ margin: 12 }}>{error}</div>
       ) : (
         <ul className="paper-list">
           {papers.length === 0 && <li className="empty-hint" style={{ padding: '8px 12px' }}>此文件夹暂无论文</li>}
-          {papers.map(p => (
+          {papers.length > 0 && shown.length === 0 && <li className="empty-hint" style={{ padding: '8px 12px' }}>无匹配论文</li>}
+          {shown.map(p => (
             <li
               key={p.key}
               onClick={() => onSelect(p)}

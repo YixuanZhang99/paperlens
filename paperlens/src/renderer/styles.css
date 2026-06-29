@@ -170,6 +170,27 @@ input::placeholder { color: var(--text-3); }
 }
 .folder-icon { margin-right: 6px; }
 
+/* 论文筛选框（标题/作者/年份即时过滤） */
+.lib-filter {
+  position: relative; display: flex; align-items: center;
+  margin: 10px 8px 0;
+}
+.lib-filter-icon {
+  position: absolute; left: 9px; font-size: 11px; opacity: .5; pointer-events: none;
+}
+.lib-filter-input {
+  width: 100%; font-size: 12.5px; padding: 6px 24px 6px 28px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+}
+.lib-filter-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.lib-filter-clear {
+  position: absolute; right: 6px; width: 18px; height: 18px; padding: 0;
+  border: none; border-radius: 50%; background: var(--border);
+  color: var(--text-2); font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.lib-filter-clear:hover:not(:disabled) { background: var(--border-strong); color: var(--text); }
+
 /* 分区小标题（文件夹 / 论文 N） */
 .lib-section {
   font-size: 11px; font-weight: 600; letter-spacing: .3px;
