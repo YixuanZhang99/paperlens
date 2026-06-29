@@ -320,7 +320,7 @@ describe('ChatView', () => {
     render(<ChatView paper={paper} />)
     await screen.findByText('旧消息')
 
-    fireEvent.click(screen.getByRole('button', { name: /清空对话/ }))
+    fireEvent.click(screen.getByRole('button', { name: /清空/ }))
     await waitFor(() => expect(clearChat).toHaveBeenCalledWith('P1'))
     await waitFor(() => expect(screen.queryByText('旧消息')).not.toBeInTheDocument())
   })

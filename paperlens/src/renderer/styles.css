@@ -352,14 +352,19 @@ input::placeholder { color: var(--text-3); }
   color: var(--text-2);
 }
 .chip:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
-.dock-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.input-row { display: flex; gap: 8px; align-items: center; }
+/* 状态行：左侧上下文状态，右侧「清空」小按钮（省去单独一行） */
+.dock-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.dock-clear { flex: none; font-size: 11.5px; padding: 2px 9px; }
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
 .input-row input[type="text"], .input-row input:not([type]) { flex: 1; }
-.deepthink-label {
-  font-size: 12px; color: var(--text-2); white-space: nowrap;
-  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+/* 深思药丸开关：开启时品牌色填充 */
+.think-toggle {
+  flex: none; white-space: nowrap; font-size: 12px; padding: 6px 12px;
+  border-radius: 999px; border: 1px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text-2);
 }
-.deepthink-label input { accent-color: var(--accent); cursor: pointer; }
+.think-toggle:hover:not(.on) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); }
+.think-toggle.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-border); font-weight: 500; }
 
 /* ─── Markdown 渲染（AI 输出）────────────────────────────────── */
 .md { white-space: normal; font-size: 13.5px; line-height: 1.65; }
@@ -512,8 +517,8 @@ input::placeholder { color: var(--text-3); }
 /* ─── Chat v2 추가 스타일 ─────────────────────────────────────── */
 /* 上下文状态条 */
 .chat-ctx {
-  font-size: 11.5px; color: var(--green); padding: 4px 0 6px;
-  line-height: 1.4;
+  font-size: 11.5px; color: var(--green); line-height: 1.4;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chat-ctx-loading { color: var(--text-3); }
 

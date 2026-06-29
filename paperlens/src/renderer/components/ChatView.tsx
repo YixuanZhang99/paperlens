@@ -284,15 +284,15 @@ export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Pap
         )}
       </div>
       <div className="chat-dock">
-        <div className={`chat-ctx ${!textReady ? 'chat-ctx-loading' : ''}`}>{ctxLine}</div>
+        <div className="dock-status">
+          <span className={`chat-ctx ${!textReady ? 'chat-ctx-loading' : ''}`}>{ctxLine}</span>
+          <button className="btn-ghost dock-clear" onClick={clearChat} disabled={busy || history.length === 0} title="清空当前论文的对话">清空</button>
+        </div>
         {error && <div role="alert" className="alert-banner">{error}</div>}
         <div className="chip-row">
           {QUICK_PROMPTS.map(p => (
             <button key={p.label} className="chip" onClick={() => send(p.prompt)} disabled={busy || !textReady}>{p.label}</button>
           ))}
-        </div>
-        <div className="dock-actions">
-          <button onClick={clearChat} disabled={busy || history.length === 0}>清空对话</button>
         </div>
         <div className="input-row">
           <textarea
@@ -309,9 +309,13 @@ export function ChatView({ paper, onNoteSaved, onPageJump, quote }: { paper: Pap
               }
             }}
           />
-          <label className="deepthink-label" title="开启后让 AI 先推理再作答（更慢更细）。对 DeepSeek 生效；Kimi 默认已内置深度思考。">
-            <input type="checkbox" checked={deepThink} onChange={e => setDeepThink(e.target.checked)} />深思
-          </label>
+          <button
+            type="button"
+            className={'think-toggle' + (deepThink ? ' on' : '')}
+            aria-pressed={deepThink}
+            title="开启后让 AI 先推理再作答（更慢更细）。对 DeepSeek 生效；Kimi 默认已内置深度思考。"
+            onClick={() => setDeepThink(v => !v)}
+          >💭 深思</button>
           {busy ? (
             <button className="btn-primary" onClick={() => window.api.stopChat()}>停止</button>
           ) : (
