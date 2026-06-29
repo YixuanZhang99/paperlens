@@ -3,6 +3,7 @@ import {
   buildQueryExpansionMessages,
   parseQueryTerms,
   buildKbAnswerMessages,
+  buildKbFollowupMessages,
   groupHitsToSources,
   type ChunkHit,
   type KbSource,
@@ -137,5 +138,20 @@ describe('buildKbAnswerMessages', () => {
     expect(msgs[1]).toEqual({ role: 'user', content: '上一个问题' })
     expect(msgs[2]).toEqual({ role: 'assistant', content: '上一个回答' })
     expect(msgs[3]).toEqual({ role: 'user', content: '新问题' })
+  })
+})
+
+describe('buildKbFollowupMessages', () => {
+  it('asks for a 3-item JSON array of cross-paper followups and passes the answer as user content', () => {
+    const msgs = buildKbFollowupMessages('这是上一轮的全库回答')
+    expect(msgs.map(m => m.role)).toEqual(['system', 'user'])
+    expect(msgs[0].content).toContain('3 个')
+    expect(msgs[0].content).toMatch(/JSON 字符串数组/)
+    expect(msgs[1]).toEqual({ role: 'user', content: '这是上一轮的全库回答' })
+  })
+
+  it('truncates an overlong answer to 2000 chars', () => {
+    const msgs = buildKbFollowupMessages('x'.repeat(5000))
+    expect(msgs[1].content.length).toBe(2000)
   })
 })

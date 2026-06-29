@@ -27,6 +27,7 @@ const okAsk = () =>
     return {
       answer: '根据库内论文，RLHF 是…[来源1]',
       sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: ['原文片段甲'] }],
+      followups: [],
     }
   })
 
@@ -125,6 +126,34 @@ describe('KnowledgeView', () => {
     await waitFor(() => expect(screen.getByText(/知识库中没有检索到/)).toBeInTheDocument())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '存为笔记' })).not.toBeInTheDocument()
+  })
+
+  it('passes the selected collection scope and renders followup chips that re-ask within scope', async () => {
+    const api = baseApi()
+    api.kbAsk = vi.fn(async (_args: any, onToken: any) => {
+      onToken('答案A', 'content')
+      return {
+        answer: '答案A',
+        sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: ['片段'] }],
+        followups: ['它们效果如何？', '有公开实现吗？'],
+      }
+    })
+    ;(window as any).api = api
+    render(<KnowledgeView onOpenPaper={vi.fn()} />)
+    // 等 collections 加载后选范围「对齐研究」(C1)
+    await screen.findByRole('option', { name: '对齐研究' })
+    fireEvent.change(screen.getByTitle(/限定问答检索范围/), { target: { value: 'C1' } })
+    // 选范围后占位符变化，用新占位符定位输入框
+    fireEvent.change(screen.getByPlaceholderText(/在所选文件夹内提问/), { target: { value: 'RLHF 是什么' } })
+    fireEvent.click(screen.getByRole('button', { name: '提问' }))
+    await waitFor(() => expect(api.kbAsk).toHaveBeenCalledTimes(1))
+    expect(api.kbAsk.mock.calls[0][0].collectionKey).toBe('C1')
+    // 追问 chip 出现，点击触发第二次提问，且范围仍为 C1
+    const chip = await screen.findByRole('button', { name: '它们效果如何？' })
+    fireEvent.click(chip)
+    await waitFor(() => expect(api.kbAsk).toHaveBeenCalledTimes(2))
+    expect(api.kbAsk.mock.calls[1][0].question).toBe('它们效果如何？')
+    expect(api.kbAsk.mock.calls[1][0].collectionKey).toBe('C1')
   })
 
   it('note cards show paper title + date, two-step delete, open-paper button, no card-level navigation', async () => {

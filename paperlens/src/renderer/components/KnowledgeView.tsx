@@ -17,6 +17,8 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
   const [asking, setAsking] = useState(false)
   const [turns, setTurns] = useState<KbTurn[]>(loadTurns)
   const [pending, setPending] = useState<{ q: string; a: string } | null>(null)
+  const [askScope, setAskScope] = useState(() => localStorage.getItem('pl.kb.askscope') ?? '')
+  const [followups, setFollowups] = useState<string[]>([])
   const [expanded, setExpanded] = useState<{ t: number; s: number } | null>(null)
   const [savedTurns, setSavedTurns] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
@@ -139,10 +141,11 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
     }
   }
 
-  async function ask() {
-    const q = question.trim()
+  async function ask(qOverride?: string) {
+    const q = (qOverride ?? question).trim()
     if (!q || asking) return
     setError(null)
+    setFollowups([])
     // 最近 3 轮作为对话历史，支撑追问指代
     const history: ChatMessage[] = turns.slice(-3).flatMap(t => [
       { role: 'user' as const, content: t.q },
@@ -152,10 +155,11 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
     setPending({ q, a: '' })
     setAsking(true)
     try {
-      const r = await window.api.kbAsk({ question: q, history }, (delta, kind) => {
+      const r = await window.api.kbAsk({ question: q, history, collectionKey: askScope || null }, (delta, kind) => {
         if (kind !== 'reasoning') setPending(p => (p ? { ...p, a: p.a + delta } : p))
       })
       setTurns(ts => [...ts, { q, a: r.answer, sources: r.sources }])
+      setFollowups(r.followups ?? [])
     } catch (e) {
       setError('问答失败：' + errMsg(e))
     } finally { setAsking(false); setPending(null) }
@@ -263,12 +267,31 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
             )}
           </div>
         )}
-        <div className="input-row">
+        {followups.length > 0 && !asking && (
+          <div className="kb-followups">
+            <span className="kb-followups-label">继续追问</span>
+            {followups.map((f, i) => (
+              <button key={i} className="chip" onClick={() => ask(f)}>{f}</button>
+            ))}
+          </div>
+        )}
+        <div className="input-row kb-ask-row">
+          <select
+            className="kb-scope"
+            value={askScope}
+            onChange={e => { setAskScope(e.target.value); localStorage.setItem('pl.kb.askscope', e.target.value) }}
+            title="限定问答检索范围（默认全部论文）"
+            disabled={asking}>
+            <option value="">全部</option>
+            {collections.map(col => (
+              <option key={col.key} value={col.key}>{col.name}</option>
+            ))}
+          </select>
           <input
-            placeholder="向整个论文库提问，例如：哪些论文讨论了 RLHF？各自怎么做的？"
+            placeholder={askScope ? '在所选文件夹内提问…' : '向整个论文库提问，例如：哪些论文讨论了 RLHF？各自怎么做的？'}
             value={question} onChange={e => setQuestion(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) ask() }} />
-          <button className="btn-primary" onClick={ask} disabled={asking}>提问</button>
+          <button className="btn-primary" onClick={() => ask()} disabled={asking}>提问</button>
         </div>
       </div>
       <div className="reader-tabs" style={{ marginTop: 14 }}>

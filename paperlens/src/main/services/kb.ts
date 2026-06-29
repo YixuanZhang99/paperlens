@@ -175,6 +175,20 @@ export function buildKbAnswerMessages(question: string, sources: KbSource[], his
   ]
 }
 
+// 全库问答的追问建议（区别于单篇 buildFollowupMessages：不绑定单篇标题，强调跨论文）
+export function buildKbFollowupMessages(lastAnswer: string): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        '你是论文知识库助手。请基于刚才的全库问答回答，生成 3 个用户可能想继续追问的简短问题' +
+        '（每个不超过 20 字，可涉及对比多篇、追细节、找相关工作）；' +
+        '只输出一个 JSON 字符串数组，例如 ["还有哪些论文用了类似方法？","它们的效果对比如何？","有公开实现吗？"]，不要任何其他文字。',
+    },
+    { role: 'user', content: lastAnswer.slice(0, 2_000) },
+  ]
+}
+
 // 综述 map 阶段取材：论文开头的 chunk（摘要/引言）最能代表全文
 export function representativeChunks(db: DatabaseType.Database, paperKey: string, k = 3): string[] {
   const rows = db.prepare(

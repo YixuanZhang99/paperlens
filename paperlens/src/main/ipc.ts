@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
-import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
+import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
 import { buildAnnotationPayload } from './services/zotero-annotation'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
@@ -208,16 +208,26 @@ export function registerIpc(c: Container) {
     return { indexed, skipped, ...kbStatus(c.db) }
   })
 
-  ipcMain.handle('kb:ask', async (event, args: { question: string; history: ChatMessage[] }) => {
+  ipcMain.handle('kb:ask', async (event, args: { question: string; history: ChatMessage[]; collectionKey?: string | null }) => {
     // 1) 查询扩写（带对话历史可解析「它」「这种方法」等指代）；失败回退原问题
     let terms: string[] = []
     try { terms = parseQueryTerms(await c.ai().complete(buildQueryExpansionMessages(args.question, args.history))) } catch { /* 扩写失败回退 */ }
     if (terms.length === 0) terms = [args.question]
-    // 2) 宽召回 24 条，留给 rerank 挑
-    let hits = searchChunks(c.db, terms, 24)
+    // 2) 召回：限定文件夹时取更宽的池再按该范围论文过滤（小集合也能凑够候选）
+    const scoped = !!args.collectionKey
+    let hits = searchChunks(c.db, terms, scoped ? 80 : 24)
+    if (scoped) {
+      const allowed = new Set((await c.zotero().listPapers(args.collectionKey)).map(p => p.key))
+      hits = hits.filter(h => allowed.has(h.paperKey))
+    }
     // 3) 无命中：优雅返回，不抛错
     if (hits.length === 0) {
-      return { answer: '知识库中没有检索到与这个问题相关的内容。可以换个问法，或到「索引状态」里更新索引后再试。', sources: [] }
+      return {
+        answer: scoped
+          ? '该文件夹范围内没有检索到相关内容。可换个问法、改为「全部」范围，或到「索引状态」更新索引后再试。'
+          : '知识库中没有检索到与这个问题相关的内容。可以换个问法，或到「索引状态」里更新索引后再试。',
+        sources: [], followups: [],
+      }
     }
     // 4) 命中多时 LLM rerank：按分数降序稳定排序（同分保持检索原序）；失败直接取前 8
     if (hits.length > 8) {
@@ -236,7 +246,10 @@ export function registerIpc(c: Container) {
     const answer = await c.ai().stream(
       buildKbAnswerMessages(args.question, sources, args.history),
       (delta, kind) => event.sender.send('kb:token', delta, kind))
-    return { answer, sources }
+    // 追问建议：失败不影响主回答
+    let followups: string[] = []
+    try { followups = parseFollowups(await c.ai().complete(buildKbFollowupMessages(answer))) } catch { /* 忽略 */ }
+    return { answer, sources, followups }
   })
 
   // 一键结构化精读：流式生成 → 自动打标签 → 直接存为笔记

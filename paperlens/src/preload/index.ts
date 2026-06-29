@@ -48,9 +48,9 @@ const api = {
     return ipcRenderer.invoke('kb:index').finally(() => ipcRenderer.removeListener('kb:progress', listener))
   },
   kbAsk: (
-    args: { question: string; history: ChatMessage[] },
+    args: { question: string; history: ChatMessage[]; collectionKey?: string | null },
     onToken: (delta: string, kind: 'content' | 'reasoning') => void,
-  ): Promise<{ answer: string; sources: Array<{ paperKey: string; paperTitle: string; chunks: string[] }> }> => {
+  ): Promise<{ answer: string; sources: Array<{ paperKey: string; paperTitle: string; chunks: string[] }>; followups: string[] }> => {
     const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
     ipcRenderer.on('kb:token', listener)
     return ipcRenderer.invoke('kb:ask', args).finally(() => ipcRenderer.removeListener('kb:token', listener))
