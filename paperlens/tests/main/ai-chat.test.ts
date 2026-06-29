@@ -185,6 +185,17 @@ describe('createAiChat.complete', () => {
     const chat = createAiChat({ apiKey: 'bad', fetch })
     await expect(chat.complete([{ role: 'user', content: 'x' }])).rejects.toThrow(/DeepSeek.*401/)
   })
+
+  it('routes to a custom provider (Kimi/Moonshot): baseUrl + model honored', async () => {
+    const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '你好' } }] }), { status: 200 }))
+    const chat = createAiChat({ apiKey: 'sk-kimi', model: 'moonshot-v1-32k', baseUrl: 'https://api.moonshot.cn/v1', fetch })
+    await chat.complete([{ role: 'user', content: 'hi' }])
+    const [url, init] = fetch.mock.calls[0]!
+    expect(url).toBe('https://api.moonshot.cn/v1/chat/completions')
+    expect((init!.headers as any)['Authorization']).toBe('Bearer sk-kimi')
+    expect(JSON.parse(init!.body as string).model).toBe('moonshot-v1-32k')
+  })
 })
 
 describe('buildFollowupMessages', () => {

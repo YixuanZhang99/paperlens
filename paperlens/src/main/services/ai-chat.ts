@@ -64,7 +64,7 @@ export function resolveModel(model: string): string {
 
 export interface AiChatDeps {
   apiKey: string
-  /** 已忽略：createAiChat 内部统一用 deepseek-chat。保留可选以兼容现有调用方。 */
+  /** 模型名。缺省回退到 deepseek-chat；Kimi 传 moonshot 或 kimi 系列模型名。 */
   model?: string
   fetch: typeof fetch
   baseUrl?: string
@@ -76,7 +76,8 @@ export interface AiChatDeps {
 
 export function createAiChat(deps: AiChatDeps) {
   const url = `${deps.baseUrl ?? 'https://api.deepseek.com'}/chat/completions`
-  const model = 'deepseek-chat' // 统一用 deepseek-chat，避免 v4-flash/thinking 触发 400
+  // 模型可配置：DeepSeek 走 deepseek-chat，Kimi 走 moonshot-*/kimi-*（均 OpenAI 兼容）
+  const model = deps.model || 'deepseek-chat'
   const thinking: { type: 'enabled' | 'disabled' } | undefined = undefined // 不发 thinking，JSON.stringify 自动丢弃 undefined
 
   async function complete(messages: ChatMessage[]): Promise<string> {

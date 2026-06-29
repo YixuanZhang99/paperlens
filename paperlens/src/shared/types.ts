@@ -31,11 +31,16 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>
 export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash'
 
 export const AppConfigSchema = z.object({
+  // AI 提供商：deepseek（默认）或 kimi（月之暗面 Moonshot，OpenAI 兼容接口）
+  aiProvider: z.enum(['deepseek', 'kimi']).default('deepseek'),
   zoteroApiKey: z.string().default(''),
   zoteroUserId: z.string().default(''),
   zoteroDataDir: z.string().default(''),
   deepseekApiKey: z.string().default(''),
   deepseekModel: z.string().default(DEFAULT_DEEPSEEK_MODEL),
+  kimiApiKey: z.string().default(''),
+  kimiModel: z.string().default('moonshot-v1-32k'),
+  kimiBaseUrl: z.string().default('https://api.moonshot.cn/v1'),
   notionToken: z.string().default(''),
   notionDatabaseId: z.string().default(''),
 })
