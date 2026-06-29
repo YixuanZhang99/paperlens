@@ -30,9 +30,10 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
   const [keyword, setKeyword] = useState(() => localStorage.getItem('pl.kb.keyword') ?? '')
   const [activeTag, setActiveTag] = useState<string | null>(() => localStorage.getItem('pl.kb.tag') || null)
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
-  const [status, setStatus] = useState<{ indexedPapers: number; totalPapers: number; totalChunks: number } | null>(null)
+  const [status, setStatus] = useState<{ indexedPapers: number; totalPapers: number; totalChunks: number; embeddedChunks: number } | null>(null)
   const [indexing, setIndexing] = useState(false)
   const [progress, setProgress] = useState('')
+  const [embedProgress, setEmbedProgress] = useState('')
   // 自动综述状态
   const [collections, setCollections] = useState<ZoteroCollection[]>([])
   const [revScope, setRevScope] = useState('')
@@ -79,11 +80,14 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
   async function runIndex() {
     setIndexing(true)
     try {
-      await window.api.kbIndex((done, total, title) => setProgress(`${done}/${total} ${title}`))
+      await window.api.kbIndex(
+        (done, total, title) => setProgress(`${done}/${total} ${title}`),
+        (done, total) => setEmbedProgress(`${done}/${total}`),
+      )
       setStatus(await window.api.kbStatus())
     } catch (e) {
       setError('索引失败：' + errMsg(e))
-    } finally { setIndexing(false); setProgress('') }
+    } finally { setIndexing(false); setProgress(''); setEmbedProgress('') }
   }
 
   async function startReview() {
@@ -369,7 +373,14 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
       ) : (
         <div className="kb-index">
           {status && <p>已索引 <b>{status.indexedPapers} / {status.totalPapers}</b> 篇论文，共 {status.totalChunks} 个片段。</p>}
+          {status && (
+            <p className="empty-hint">
+              语义向量：{status.embeddedChunks} / {status.totalChunks} 个片段
+              {status.totalChunks > 0 && status.embeddedChunks >= status.totalChunks ? '（已就绪 ✓）' : status.embeddedChunks === 0 ? '（未启用或待生成）' : ''}
+            </p>
+          )}
           {indexing && <p className="empty-hint">索引中：{progress || '准备中…'}</p>}
+          {indexing && embedProgress && <p className="empty-hint">生成语义向量：{embedProgress}（首次会下载模型，请稍候）</p>}
           <button onClick={runIndex} disabled={indexing}>更新索引</button>
           <div className="kb-review">
             <div className="kb-review-head">

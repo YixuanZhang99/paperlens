@@ -68,6 +68,17 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="settings-group">
+        <div className="settings-group-title">🔎 知识库语义检索</div>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={cfg.semanticSearch !== false}
+            onChange={e => setCfg({ ...cfg, semanticSearch: e.target.checked })} />
+          <span>启用语义向量检索（本地小模型，首次更新索引时下载约 30MB；关闭则仅用关键词）</span>
+        </label>
+      </div>
+
+      <div className="settings-group">
         <div className="settings-group-title">🔗 Notion 同步（可选）</div>
         {NOTION_FIELDS.map(renderField)}
       </div>

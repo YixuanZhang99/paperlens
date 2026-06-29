@@ -1,5 +1,6 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -13,6 +14,7 @@ import { createZoteroClient } from './services/zotero-client'
 import { createZoteroLocal } from './services/zotero-local'
 import { createAiChat } from './services/ai-chat'
 import { createNotionSync } from './services/notion-sync'
+import { createEmbedder } from './services/embedder'
 
 export function createContainer() {
   const userData = app.getPath('userData')
@@ -49,6 +51,11 @@ export function createContainer() {
     now: () => Date.now(),
     genId: () => randomUUID(),
   })
+  // 本地语义嵌入（推理在 utilityProcess 子进程；模型下载到 userData/models，走 hf-mirror）
+  const embedder = createEmbedder({
+    cacheDir: join(userData, 'models'),
+    workerPath: fileURLToPath(new URL('./embedder-worker.js', import.meta.url)),
+  })
 
   // 工厂：按当前配置即时构造外部客户端（密钥可能随时被用户更新）
   const cfg = () => configStore.get()
@@ -83,6 +90,6 @@ export function createContainer() {
     join: (...parts) => join(...parts),
   })
 
-  return { configStore, db, notesRepo, chatRepo, highlightsRepo, zotero, ai, notion, zoteroLocal }
+  return { configStore, db, notesRepo, chatRepo, highlightsRepo, embedder, zotero, ai, notion, zoteroLocal }
 }
 export type Container = ReturnType<typeof createContainer>

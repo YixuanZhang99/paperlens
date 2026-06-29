@@ -1,5 +1,6 @@
 import type DatabaseType from 'better-sqlite3'
 import type { ChatMessage } from '@shared/types'
+import { serializeVector, deserializeVector, topKByDot } from './vector'
 
 // 论文全文切块：固定窗口 + 重叠，保证检索段落上下文完整
 export function chunkText(text: string, size = 1200, overlap = 150): string[] {
@@ -143,6 +144,45 @@ export function searchChunks(db: DatabaseType.Database, terms: string[], k = 8):
     .sort((a, b) => b.hitCount - a.hitCount || a.bestRank - b.bestRank)
     .slice(0, k)
     .map(({ hitCount: _h, bestRank: _r, ...hit }) => hit)
+}
+
+// ===== 语义向量检索（批次4）=====
+
+// 加载全部已嵌入 chunk，按点积（余弦）取 top-k，返回 ChunkHit（保持相关度顺序）
+export function searchVector(db: DatabaseType.Database, queryVec: Float32Array, k = 24): ChunkHit[] {
+  const rows = db.prepare('SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL').all() as Array<{ id: number; embedding: Buffer }>
+  if (rows.length === 0) return []
+  const cands = rows.map(r => ({ id: r.id, vec: deserializeVector(r.embedding) }))
+  const top = topKByDot(queryVec, cands, k)
+  if (top.length === 0) return []
+  const order = new Map(top.map((t, i) => [t.id, i]))
+  const ph = top.map(() => '?').join(',')
+  const full = db.prepare(
+    `SELECT id, paper_key, paper_title, text, page_index FROM chunks WHERE id IN (${ph})`
+  ).all(...top.map(t => t.id)) as Array<{ id: number; paper_key: string; paper_title: string; text: string; page_index: number }>
+  return full
+    .map(r => ({ id: r.id, paperKey: r.paper_key, paperTitle: r.paper_title, text: r.text, pageIndex: r.page_index ?? 0 }))
+    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+}
+
+// 回填取材：未嵌入的 chunk（id+text）
+export function chunksMissingEmbedding(db: DatabaseType.Database, limit = 64): Array<{ id: number; text: string }> {
+  return db.prepare('SELECT id, text FROM chunks WHERE embedding IS NULL LIMIT ?').all(limit) as Array<{ id: number; text: string }>
+}
+
+// 写回向量（同事务）
+export function setChunkEmbeddings(db: DatabaseType.Database, rows: Array<{ id: number; vec: Float32Array }>): void {
+  const upd = db.prepare('UPDATE chunks SET embedding = ? WHERE id = ?')
+  const tx = db.transaction((rs: Array<{ id: number; vec: Float32Array }>) => {
+    for (const r of rs) upd.run(serializeVector(r.vec), r.id)
+  })
+  tx(rows)
+}
+
+// 嵌入进度（embedded = 已有向量的 chunk 数；total = 全部）
+export function embeddingStats(db: DatabaseType.Database): { embedded: number; total: number } {
+  const r = db.prepare('SELECT COUNT(*) AS total, COUNT(embedding) AS embedded FROM chunks').get() as { total: number; embedded: number }
+  return { embedded: r.embedded, total: r.total }
 }
 
 export interface KbHit {

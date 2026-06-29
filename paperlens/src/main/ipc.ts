@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
-import { chunkPagedText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
+import { chunkPagedText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, searchVector, chunksMissingEmbedding, setChunkEmbeddings, embeddingStats, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
 import { buildAnnotationPayload } from './services/zotero-annotation'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
@@ -187,7 +187,7 @@ export function registerIpc(c: Container) {
 
   ipcMain.handle('kb:status', async () => {
     const total = (await c.zotero().listPapers()).length
-    return { ...kbStatus(c.db), totalPapers: total }
+    return { ...kbStatus(c.db), totalPapers: total, embeddedChunks: embeddingStats(c.db).embedded }
   })
 
   // 全库索引：逐篇本地抽取 → 切块入库；kb:progress 推进度；单篇失败跳过
@@ -205,7 +205,28 @@ export function registerIpc(c: Container) {
       } catch { skipped++ }
       event.sender.send('kb:progress', processed, papers.length, p.title)
     }
-    return { indexed, skipped, ...kbStatus(c.db) }
+    // 嵌入回填：给未嵌入的 chunk（新建 + 历史）算语义向量。首次会下载模型(~30MB,走 hf-mirror)。
+    // 模型下载/推理失败 → 跳过，不影响关键词检索。可在设置关闭语义检索。
+    if (c.configStore.get().semanticSearch !== false) {
+      const totalMissing = embeddingStats(c.db).total - embeddingStats(c.db).embedded
+      let embedded = 0, fails = 0
+      // 逐批容错：worker 主动回收/偶发崩溃时 embedPassages 会拒绝，下一轮取同批重试（自愈）；
+      // 连续失败多次（如模型下载失败）才放弃，FTS5 仍可用。
+      while (embeddingStats(c.db).embedded < embeddingStats(c.db).total) {
+        const batch = chunksMissingEmbedding(c.db, 32)
+        if (batch.length === 0) break
+        try {
+          const vecs = await c.embedder.embedPassages(batch.map(b => b.text))
+          setChunkEmbeddings(c.db, batch.map((b, i) => ({ id: b.id, vec: vecs[i] })))
+          embedded += batch.length
+          fails = 0
+          event.sender.send('kb:embed-progress', embedded, totalMissing)
+        } catch {
+          if (++fails > 5) break
+        }
+      }
+    }
+    return { indexed, skipped, ...kbStatus(c.db), embeddedChunks: embeddingStats(c.db).embedded }
   })
 
   ipcMain.handle('kb:ask', async (event, args: { question: string; history: ChatMessage[]; collectionKey?: string | null }) => {
@@ -213,9 +234,19 @@ export function registerIpc(c: Container) {
     let terms: string[] = []
     try { terms = parseQueryTerms(await c.ai().complete(buildQueryExpansionMessages(args.question, args.history))) } catch { /* 扩写失败回退 */ }
     if (terms.length === 0) terms = [args.question]
-    // 2) 召回：限定文件夹时取更宽的池再按该范围论文过滤（小集合也能凑够候选）
+    // 2) 召回：关键词(FTS5) + 语义(向量) 混合。限定文件夹时取更宽的池再过滤。
     const scoped = !!args.collectionKey
-    let hits = searchChunks(c.db, terms, scoped ? 80 : 24)
+    const pool = scoped ? 80 : 24
+    let hits = searchChunks(c.db, terms, pool)
+    // 语义召回（可在设置关闭；模型未就绪/下载失败则静默回退到仅关键词）
+    if (c.configStore.get().semanticSearch !== false) {
+      try {
+        const qvec = await c.embedder.embedQuery(args.question)
+        const vhits = searchVector(c.db, qvec, pool)
+        const seen = new Set(hits.map(h => h.id))
+        for (const v of vhits) if (!seen.has(v.id)) { hits.push(v); seen.add(v.id) }
+      } catch { /* 语义检索不可用 → 仅关键词 */ }
+    }
     if (scoped) {
       const allowed = new Set((await c.zotero().listPapers(args.collectionKey)).map(p => p.key))
       hits = hits.filter(h => allowed.has(h.paperKey))

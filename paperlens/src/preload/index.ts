@@ -40,12 +40,20 @@ const api = {
     })
   },
   listAllNotes: (): Promise<Note[]> => ipcRenderer.invoke('notes:listAll'),
-  kbStatus: (): Promise<{ indexedPapers: number; totalChunks: number; totalPapers: number }> =>
+  kbStatus: (): Promise<{ indexedPapers: number; totalChunks: number; totalPapers: number; embeddedChunks: number }> =>
     ipcRenderer.invoke('kb:status'),
-  kbIndex: (onProgress: (done: number, total: number, title: string) => void): Promise<{ indexed: number; skipped: number }> => {
+  kbIndex: (
+    onProgress: (done: number, total: number, title: string) => void,
+    onEmbedProgress?: (done: number, total: number) => void,
+  ): Promise<{ indexed: number; skipped: number }> => {
     const listener = (_e: Electron.IpcRendererEvent, done: number, total: number, title: string) => onProgress(done, total, title)
+    const embedListener = (_e: Electron.IpcRendererEvent, done: number, total: number) => onEmbedProgress?.(done, total)
     ipcRenderer.on('kb:progress', listener)
-    return ipcRenderer.invoke('kb:index').finally(() => ipcRenderer.removeListener('kb:progress', listener))
+    ipcRenderer.on('kb:embed-progress', embedListener)
+    return ipcRenderer.invoke('kb:index').finally(() => {
+      ipcRenderer.removeListener('kb:progress', listener)
+      ipcRenderer.removeListener('kb:embed-progress', embedListener)
+    })
   },
   kbAsk: (
     args: { question: string; history: ChatMessage[]; collectionKey?: string | null },

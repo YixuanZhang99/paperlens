@@ -24,7 +24,8 @@ export function migrate(db: DatabaseType.Database): void {
       paper_title TEXT NOT NULL,
       seq INTEGER NOT NULL,
       text TEXT NOT NULL,
-      page_index INTEGER NOT NULL DEFAULT 0
+      page_index INTEGER NOT NULL DEFAULT 0,
+      embedding BLOB
     );
     CREATE INDEX IF NOT EXISTS idx_chunks_paper ON chunks(paper_key);
 
@@ -62,10 +63,15 @@ export function migrate(db: DatabaseType.Database): void {
     CREATE INDEX IF NOT EXISTS idx_highlights_paper ON highlights(paper_key);
   `)
 
-  // 旧库迁移：chunks 增加 page_index（来源跳页）。旧 chunk 无页码，清空让静默索引按页重建。
+  // 旧库迁移
   const chunkCols = db.prepare(`PRAGMA table_info(chunks)`).all() as Array<{ name: string }>
+  // page_index（来源跳页）：旧 chunk 无页码，清空让静默索引按页重建
   if (!chunkCols.some(c => c.name === 'page_index')) {
     db.exec(`ALTER TABLE chunks ADD COLUMN page_index INTEGER NOT NULL DEFAULT 0;`)
     db.exec(`DELETE FROM chunks;`)
+  }
+  // embedding（语义向量）：可空，后台静默回填，无需清空
+  if (!chunkCols.some(c => c.name === 'embedding')) {
+    db.exec(`ALTER TABLE chunks ADD COLUMN embedding BLOB;`)
   }
 }

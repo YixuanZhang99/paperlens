@@ -43,6 +43,8 @@ export const AppConfigSchema = z.object({
   kimiBaseUrl: z.string().default('https://api.moonshot.cn/v1'),
   notionToken: z.string().default(''),
   notionDatabaseId: z.string().default(''),
+  // 知识库语义向量检索（本地小模型，首次会下载 ~30MB）。关闭则仅用关键词检索。
+  semanticSearch: z.boolean().default(true),
 })
 export type AppConfig = z.infer<typeof AppConfigSchema>
 
