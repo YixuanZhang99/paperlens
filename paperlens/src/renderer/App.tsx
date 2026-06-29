@@ -44,14 +44,18 @@ export function App() {
     setChatOpen(true)
   }, [])
 
-  async function openPaperByKey(paperKey: string) {
+  async function openPaperByKey(paperKey: string, page?: number, quote?: string) {
     setShowKb(false)
     let p = papersCache.current.find(x => x.key === paperKey)
     if (!p) {
       papersCache.current = await window.api.listPapers().catch(() => [] as Paper[])
       p = papersCache.current.find(x => x.key === paperKey)
     }
-    if (p) setSelected(p)
+    if (p) {
+      setSelected(p)
+      // 来源带页码：选中论文的同时下发跳转目标，ReaderView 会加载 PDF 并滚动到该页+高亮
+      if (page && page > 0) setJumpTarget({ paperKey, page, quote, nonce: ++jumpNonce.current })
+    }
   }
 
   useEffect(() => {

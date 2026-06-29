@@ -499,6 +499,10 @@ input::placeholder { color: var(--text-3); }
   border-left: 3px solid var(--accent-border); background: var(--surface);
   max-height: 120px; overflow: auto; white-space: pre-wrap;
 }
+/* 带页码、可点击跳原文的引文片段 */
+.kb-quote-jump { cursor: pointer; transition: background .12s, border-color .12s; }
+.kb-quote-jump:hover { background: var(--accent-soft); border-left-color: var(--accent); }
+.kb-quote-page { display: inline-block; font-size: 11px; font-weight: 600; color: var(--accent); margin-right: 6px; }
 .kb-save-note { margin-left: auto; }
 /* 问答范围下拉：与提问框同排 */
 .kb-ask-row { gap: 8px; }

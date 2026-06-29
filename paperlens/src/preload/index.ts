@@ -50,7 +50,7 @@ const api = {
   kbAsk: (
     args: { question: string; history: ChatMessage[]; collectionKey?: string | null },
     onToken: (delta: string, kind: 'content' | 'reasoning') => void,
-  ): Promise<{ answer: string; sources: Array<{ paperKey: string; paperTitle: string; chunks: string[] }>; followups: string[] }> => {
+  ): Promise<{ answer: string; sources: Array<{ paperKey: string; paperTitle: string; chunks: Array<{ text: string; page: number }> }>; followups: string[] }> => {
     const listener = (_e: Electron.IpcRendererEvent, delta: string, kind: 'content' | 'reasoning') => onToken(delta, kind)
     ipcRenderer.on('kb:token', listener)
     return ipcRenderer.invoke('kb:ask', args).finally(() => ipcRenderer.removeListener('kb:token', listener))

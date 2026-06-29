@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { Container } from './container'
 import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
-import { chunkText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
+import { chunkPagedText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
 import { buildAnnotationPayload } from './services/zotero-annotation'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
@@ -199,8 +199,8 @@ export function registerIpc(c: Container) {
       processed++
       if (done.has(p.key)) { event.sender.send('kb:progress', processed, papers.length, p.title); continue }
       try {
-        const text = await getPaperTextCached(c, p)
-        if (text) { insertChunks(c.db, p.key, p.title, chunkText(text)); indexed++ }
+        const text = await getPaperTextPaged(c, p)
+        if (text) { insertChunks(c.db, p.key, p.title, chunkPagedText(text)); indexed++ }
         else skipped++
       } catch { skipped++ }
       event.sender.send('kb:progress', processed, papers.length, p.title)

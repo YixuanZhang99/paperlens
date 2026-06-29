@@ -11,8 +11,8 @@ import {
 function seeded() {
   const db = new Database(':memory:')
   migrate(db)
-  insertChunks(db, 'P1', 'RLHF 论文', ['段0 摘要', '段1 引言', '段2 方法', '段3 实验', '段4 结论'])
-  insertChunks(db, 'P2', '蒸馏论文', ['蒸馏段0', '蒸馏段1'])
+  insertChunks(db, 'P1', 'RLHF 论文', ['段0 摘要', '段1 引言', '段2 方法', '段3 实验', '段4 结论'].map((text, i) => ({ text, page: i + 1 })))
+  insertChunks(db, 'P2', '蒸馏论文', ['蒸馏段0', '蒸馏段1'].map((text, i) => ({ text, page: i + 1 })))
   return db
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildRerankMessages, parseRerankScores, type ChunkHit } from '../../src/main/services/kb'
 
 const hit = (id: number, text: string): ChunkHit =>
-  ({ id, paperKey: `P${id}`, paperTitle: `论文${id}`, text })
+  ({ id, paperKey: `P${id}`, paperTitle: `论文${id}`, text, pageIndex: id })
 
 describe('buildRerankMessages', () => {
   it('asks for a 0-3 JSON score array of exactly N numbers', () => {

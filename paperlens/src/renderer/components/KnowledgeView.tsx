@@ -4,15 +4,15 @@ import { Markdown } from './Markdown'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-// 与 preload kbAsk 返回结构一致（chunks 为命中原文片段，支撑「信任链」展示）
-type KbSource = { paperKey: string; paperTitle: string; chunks: string[] }
+// 与 preload kbAsk 返回结构一致（chunks 含原文片段 + 来源页码，支撑「信任链」+ 跳转原文）
+type KbSource = { paperKey: string; paperTitle: string; chunks: Array<{ text: string; page: number }> }
 type KbTurn = { q: string; a: string; sources: KbSource[] }
 
 function loadTurns(): KbTurn[] {
   try { return JSON.parse(localStorage.getItem('pl.kb.turns') || '[]') } catch { return [] }
 }
 
-export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string) => void }) {
+export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string, page?: number, quote?: string) => void }) {
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [turns, setTurns] = useState<KbTurn[]>(loadTurns)
@@ -248,7 +248,14 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string)
                     {expanded?.t === ti && t.sources[expanded.s] && (
                       <div className="kb-source-panel">
                         {t.sources[expanded.s].chunks.map((c, ci) => (
-                          <blockquote key={ci} className="kb-quote">{c}</blockquote>
+                          <blockquote
+                            key={ci}
+                            className={'kb-quote' + (c.page > 0 ? ' kb-quote-jump' : '')}
+                            title={c.page > 0 ? `跳转到原文第 ${c.page} 页并高亮` : undefined}
+                            onClick={c.page > 0 ? () => onOpenPaper(t.sources[expanded.s].paperKey, c.page, c.text.slice(0, 100)) : undefined}>
+                            {c.page > 0 && <span className="kb-quote-page">第{c.page}页 →</span>}
+                            {c.text}
+                          </blockquote>
                         ))}
                         <button onClick={() => onOpenPaper(t.sources[expanded.s].paperKey)}>打开论文 →</button>
                       </div>

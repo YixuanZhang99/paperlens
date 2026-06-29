@@ -26,7 +26,7 @@ const okAsk = () =>
     onToken('RLHF 是…[来源1]', 'content')
     return {
       answer: '根据库内论文，RLHF 是…[来源1]',
-      sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: ['原文片段甲'] }],
+      sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: [{ text: '原文片段甲', page: 7 }] }],
       followups: [],
     }
   })
@@ -70,15 +70,21 @@ describe('KnowledgeView', () => {
     render(<KnowledgeView onOpenPaper={onOpenPaper} />)
     await askOnce('RLHF 是什么')
     const chip = await screen.findByRole('button', { name: /\[来源1\] RLHF 论文/ })
-    fireEvent.click(chip) // chip 点击不再直接跳转
+    fireEvent.click(chip) // chip 点击只展开，不跳转
     expect(onOpenPaper).not.toHaveBeenCalled()
-    const quote = await screen.findByText('原文片段甲')
+    // 引文带页码徽标，点击引文跳到该页并把片段前缀作为高亮 quote
+    const pageLabel = await screen.findByText(/第7页/)
+    const quote = pageLabel.closest('.kb-quote') as HTMLElement
+    expect(quote.textContent).toContain('原文片段甲')
+    fireEvent.click(quote)
+    expect(onOpenPaper).toHaveBeenCalledWith('P1', 7, '原文片段甲')
+    // 「打开论文 →」按钮不带页码（整篇打开）
     const panel = quote.closest('.kb-source-panel') as HTMLElement
     fireEvent.click(within(panel).getByRole('button', { name: /打开论文/ }))
     expect(onOpenPaper).toHaveBeenCalledWith('P1')
     // 再点 chip 收起
     fireEvent.click(chip)
-    await waitFor(() => expect(screen.queryByText('原文片段甲')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText(/第7页/)).not.toBeInTheDocument())
   })
 
   it('persists turns across remount via localStorage and clears them with the clear button', async () => {
@@ -134,7 +140,7 @@ describe('KnowledgeView', () => {
       onToken('答案A', 'content')
       return {
         answer: '答案A',
-        sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: ['片段'] }],
+        sources: [{ paperKey: 'P1', paperTitle: 'RLHF 论文', chunks: [{ text: '片段', page: 1 }] }],
         followups: ['它们效果如何？', '有公开实现吗？'],
       }
     })

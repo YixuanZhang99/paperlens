@@ -14,6 +14,22 @@ export function chunkText(text: string, size = 1200, overlap = 150): string[] {
   return out
 }
 
+// 带 [第N页] 标记的正文 → 按页切段后逐页 chunk，每块标注来源页码。
+// 不让 chunk 跨页，保证「来源片段」跳转页码唯一、准确。无标记时退化为页码 0。
+export function chunkPagedText(pagedText: string, size = 1200, overlap = 150): PagedChunk[] {
+  const matches = [...pagedText.matchAll(/\[第(\d+)页\]\n?/g)]
+  if (matches.length === 0) return chunkText(pagedText, size, overlap).map(text => ({ text, page: 0 }))
+  const out: PagedChunk[] = []
+  for (let i = 0; i < matches.length; i++) {
+    const page = Number(matches[i][1])
+    const start = (matches[i].index ?? 0) + matches[i][0].length
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? pagedText.length) : pagedText.length
+    const body = pagedText.slice(start, end)
+    for (const text of chunkText(body, size, overlap)) out.push({ text, page })
+  }
+  return out
+}
+
 export function buildQueryExpansionMessages(question: string, history?: ChatMessage[]): ChatMessage[] {
   let system =
     '你是文献检索助手。把用户问题改写成 3-6 个适合全文检索的关键词/短语，' +
@@ -62,15 +78,19 @@ export interface ChunkHit {
   paperKey: string
   paperTitle: string
   text: string
+  pageIndex: number
 }
 
-export function insertChunks(db: DatabaseType.Database, paperKey: string, paperTitle: string, chunks: string[]): void {
+// 每个 chunk 带来源页码（1 基；0 = 无页信息）。供 KB 来源跳转到原文页。
+export type PagedChunk = { text: string; page: number }
+
+export function insertChunks(db: DatabaseType.Database, paperKey: string, paperTitle: string, chunks: PagedChunk[]): void {
   const del = db.prepare('DELETE FROM chunks WHERE paper_key = ?')
-  const ins = db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text) VALUES (?,?,?,?)')
+  const ins = db.prepare('INSERT INTO chunks (paper_key, paper_title, seq, text, page_index) VALUES (?,?,?,?,?)')
   // 删除与插入同事务：重建索引中途失败时回滚，不会把论文「越索引越没了」
-  const replace = db.transaction((cs: string[]) => {
+  const replace = db.transaction((cs: PagedChunk[]) => {
     del.run(paperKey)
-    cs.forEach((c, i) => ins.run(paperKey, paperTitle, i, c))
+    cs.forEach((c, i) => ins.run(paperKey, paperTitle, i, c.text, c.page))
   })
   replace(chunks)
 }
@@ -90,14 +110,14 @@ export function kbStatus(db: DatabaseType.Database): { indexedPapers: number; to
 export function searchChunks(db: DatabaseType.Database, terms: string[], k = 8): ChunkHit[] {
   type Acc = ChunkHit & { hitCount: number; bestRank: number }
   const acc = new Map<number, Acc>()
-  const add = (row: { id: number; paper_key: string; paper_title: string; text: string }, rank: number) => {
+  const add = (row: { id: number; paper_key: string; paper_title: string; text: string; page_index: number }, rank: number) => {
     const cur = acc.get(row.id)
     if (cur) {
       cur.hitCount += 1
       cur.bestRank = Math.min(cur.bestRank, rank)
     } else {
       acc.set(row.id, {
-        id: row.id, paperKey: row.paper_key, paperTitle: row.paper_title, text: row.text,
+        id: row.id, paperKey: row.paper_key, paperTitle: row.paper_title, text: row.text, pageIndex: row.page_index ?? 0,
         hitCount: 1, bestRank: rank,
       })
     }
@@ -107,15 +127,15 @@ export function searchChunks(db: DatabaseType.Database, terms: string[], k = 8):
     if (!t) continue
     if (t.length >= 3) {
       const rows = db.prepare(
-        `SELECT c.id, c.paper_key, c.paper_title, c.text, bm25(chunks_fts) AS rank
+        `SELECT c.id, c.paper_key, c.paper_title, c.text, c.page_index, bm25(chunks_fts) AS rank
          FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid
          WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?`
-      ).all(`"${t.replaceAll('"', '""')}"`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string; rank: number }>
+      ).all(`"${t.replaceAll('"', '""')}"`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string; page_index: number; rank: number }>
       rows.forEach(r => add(r, r.rank))
     } else {
       const rows = db.prepare(
-        `SELECT id, paper_key, paper_title, text FROM chunks WHERE text LIKE ? LIMIT ?`
-      ).all(`%${t}%`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string }>
+        `SELECT id, paper_key, paper_title, text, page_index FROM chunks WHERE text LIKE ? LIMIT ?`
+      ).all(`%${t}%`, k) as Array<{ id: number; paper_key: string; paper_title: string; text: string; page_index: number }>
       rows.forEach(r => add(r, 0))
     }
   }
@@ -134,7 +154,7 @@ export interface KbHit {
 export interface KbSource {
   paperKey: string
   paperTitle: string
-  chunks: string[]
+  chunks: PagedChunk[]
 }
 
 const MAX_CHUNKS_PER_SOURCE = 3
@@ -150,7 +170,7 @@ export function groupHitsToSources(hits: ChunkHit[]): KbSource[] {
       byKey.set(h.paperKey, src)
       out.push(src)
     }
-    if (src.chunks.length < MAX_CHUNKS_PER_SOURCE) src.chunks.push(h.text)
+    if (src.chunks.length < MAX_CHUNKS_PER_SOURCE) src.chunks.push({ text: h.text, page: h.pageIndex })
   }
   return out
 }
@@ -158,7 +178,7 @@ export function groupHitsToSources(hits: ChunkHit[]): KbSource[] {
 export function buildKbAnswerMessages(question: string, sources: KbSource[], history?: ChatMessage[]): ChatMessage[] {
   // 来源按论文编号（同论文多段合并），保证答案里的 [来源N] 与界面第 N 个论文 chip 严格一致
   const sourceText = sources
-    .map((s, i) => `【来源${i + 1} · ${s.paperTitle}】\n${s.chunks.join('\n---\n')}`)
+    .map((s, i) => `【来源${i + 1} · ${s.paperTitle}】\n${s.chunks.map(c => c.text).join('\n---\n')}`)
     .join('\n\n')
   return [
     {

@@ -72,7 +72,7 @@ describe('parseQueryTerms', () => {
 })
 
 const hit = (id: number, paperKey: string, paperTitle: string, text: string): ChunkHit =>
-  ({ id, paperKey, paperTitle, text })
+  ({ id, paperKey, paperTitle, text, pageIndex: id })
 
 describe('groupHitsToSources', () => {
   it('groups hits by paperKey preserving first-hit order', () => {
@@ -82,8 +82,8 @@ describe('groupHitsToSources', () => {
       hit(3, 'P1', '论文A', '片段三'),
     ])
     expect(sources).toHaveLength(2)
-    expect(sources[0]).toEqual({ paperKey: 'P1', paperTitle: '论文A', chunks: ['片段一', '片段三'] })
-    expect(sources[1]).toEqual({ paperKey: 'P2', paperTitle: '论文B', chunks: ['片段二'] })
+    expect(sources[0]).toEqual({ paperKey: 'P1', paperTitle: '论文A', chunks: [{ text: '片段一', page: 1 }, { text: '片段三', page: 3 }] })
+    expect(sources[1]).toEqual({ paperKey: 'P2', paperTitle: '论文B', chunks: [{ text: '片段二', page: 2 }] })
   })
 
   it('caps chunks at 3 per paper, dropping the rest', () => {
@@ -94,7 +94,7 @@ describe('groupHitsToSources', () => {
       hit(4, 'P1', '论文A', 'c4'),
     ])
     expect(sources).toHaveLength(1)
-    expect(sources[0].chunks).toEqual(['c1', 'c2', 'c3'])
+    expect(sources[0].chunks).toEqual([{ text: 'c1', page: 1 }, { text: 'c2', page: 2 }, { text: 'c3', page: 3 }])
   })
 
   it('returns [] for no hits', () => {
@@ -104,7 +104,7 @@ describe('groupHitsToSources', () => {
 
 describe('buildKbAnswerMessages', () => {
   const src = (paperKey: string, paperTitle: string, chunks: string[]): KbSource =>
-    ({ paperKey, paperTitle, chunks })
+    ({ paperKey, paperTitle, chunks: chunks.map((text, i) => ({ text, page: i + 1 })) })
 
   it('embeds paper-numbered sources and demands citation + honesty', () => {
     const msgs = buildKbAnswerMessages('RLHF 是什么？', [

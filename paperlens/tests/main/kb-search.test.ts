@@ -6,8 +6,8 @@ import { insertChunks, searchChunks, kbStatus, indexedPaperKeys } from '../../sr
 function seeded() {
   const db = new Database(':memory:')
   migrate(db)
-  insertChunks(db, 'P1', 'RLHF 论文', ['reward model 与 RLHF 对齐训练', '第二段讲 PPO 算法细节'])
-  insertChunks(db, 'P2', '蒸馏论文', ['knowledge distillation 知识蒸馏方法'])
+  insertChunks(db, 'P1', 'RLHF 论文', [{ text: 'reward model 与 RLHF 对齐训练', page: 1 }, { text: '第二段讲 PPO 算法细节', page: 3 }])
+  insertChunks(db, 'P2', '蒸馏论文', [{ text: 'knowledge distillation 知识蒸馏方法', page: 1 }])
   return db
 }
 
@@ -19,7 +19,7 @@ describe('insertChunks / indexedPaperKeys / kbStatus', () => {
   })
   it('re-inserting a paper replaces its old chunks', () => {
     const db = seeded()
-    insertChunks(db, 'P1', 'RLHF 论文', ['新版本片段'])
+    insertChunks(db, 'P1', 'RLHF 论文', [{ text: '新版本片段', page: 1 }])
     expect(kbStatus(db).totalChunks).toBe(2)
     expect(searchChunks(db, ['PPO'])).toHaveLength(0)
   })
@@ -31,6 +31,7 @@ describe('searchChunks', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1)
     expect(hits[0]).toMatchObject({ paperKey: 'P1', paperTitle: 'RLHF 论文' })
     expect(hits[0].text).toContain('RLHF')
+    expect(hits[0].pageIndex).toBe(1) // 页码随检索返回，支撑来源跳转
   })
   it('2-char CJK terms fall back to LIKE', () => {
     const hits = searchChunks(seeded(), ['蒸馏'])
