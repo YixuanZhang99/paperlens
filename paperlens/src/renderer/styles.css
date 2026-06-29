@@ -94,6 +94,8 @@ input::placeholder { color: var(--text-3); }
 
 /* ─── 应用骨架 ────────────────────────────────────────────────── */
 .app { display: grid; height: 100vh; background: var(--bg); } /* 列宽由内联样式动态控制 */
+/* 全屏时顶部安全留白：菜单栏/标题栏从顶部滑下时落在留白内，不再遮住应用顶栏 */
+body.is-fullscreen .app { padding-top: var(--fs-inset, 52px); transition: padding-top .15s ease; }
 
 .gutter { cursor: col-resize; background: transparent; transition: background .12s; }
 .gutter:hover, .gutter:active { background: var(--accent-border); }

@@ -35,6 +35,15 @@ export function App() {
     window.api.listPapers().then(ps => { papersCache.current = ps }).catch(() => {})
   }, [])
 
+  // 全屏时给顶部留安全区，避免 macOS 菜单栏/标题栏滑下遮住应用顶栏按钮
+  useEffect(() => {
+    const off = window.api.onFullscreen?.((px) => {
+      document.body.classList.toggle('is-fullscreen', px > 0)
+      document.body.style.setProperty('--fs-inset', `${px}px`)
+    })
+    return off
+  }, [])
+
   const handlePageJump = useCallback((page: number, quote?: string) => {
     if (selected) setJumpTarget({ paperKey: selected.key, page, quote, nonce: ++jumpNonce.current })
   }, [selected])

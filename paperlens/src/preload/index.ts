@@ -62,6 +62,12 @@ const api = {
   updateHighlight: (a: { id: string; comment?: string | null; color?: string }): Promise<void> => ipcRenderer.invoke('highlights:update', a),
   deleteHighlight: (id: string): Promise<void> => ipcRenderer.invoke('highlights:delete', id),
   syncHighlights: (paperKey: string): Promise<{ synced: number; failed: number }> => ipcRenderer.invoke('highlights:sync', paperKey),
+  // 全屏顶部安全留白：insetPx>0 表示进入全屏，0 表示退出。返回取消订阅函数。
+  onFullscreen: (cb: (insetPx: number) => void): (() => void) => {
+    const l = (_e: Electron.IpcRendererEvent, px: number) => cb(px)
+    ipcRenderer.on('window:fullscreen', l)
+    return () => ipcRenderer.removeListener('window:fullscreen', l)
+  },
   kbReview: (
     args: { collectionKey: string | null; scopeLabel: string },
     onProgress: (done: number, total: number, title: string) => void,
