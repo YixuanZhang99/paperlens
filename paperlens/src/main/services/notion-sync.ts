@@ -5,7 +5,13 @@ const MAX_TEXT = 2000   // rich_text / title 单段 content ≤ 2000 字符
 const MAX_BLOCKS = 100  // 单次创建 page 的 children block ≤ 100
 const MAX_TAG = 100     // multi_select 选项名 ≤ 100 字符
 
-const clamp = (s: string, max = MAX_TEXT) => (s.length > max ? s.slice(0, max) : s)
+// 截断到 ≤max；若截断点正好落在代理对(emoji 等 4 字节字符占 2 个 UTF-16 code unit)中间，
+// 回退 1 个 code unit，避免产生孤立高代理（可能被 Notion 拒）
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff
+const clamp = (s: string, max = MAX_TEXT) => {
+  if (s.length <= max) return s
+  return s.slice(0, isHighSurrogate(s.charCodeAt(max - 1)) ? max - 1 : max)
+}
 const txt = (content: string) => [{ text: { content: clamp(content) } }]
 // multi_select 选项名：不能含逗号(会被拆/400)、≤100 字、非空
 const toTagOption = (name: string) => clamp(name.replace(/,/g, ' '), MAX_TAG).trim()
@@ -21,9 +27,14 @@ export function noteToNotionPage(note: Note, paper: Paper, databaseId: string) {
     properties.Year = { number: paper.year }
   }
 
-  // 正文按 2000 切成多个段落块；总块数封顶 100，超出截断并提示
+  // 正文按 2000 切成多个段落块（块边界同样避开代理对中间，半个字符并入下一块）；总块数封顶 100
   let chunks: string[] = []
-  for (let i = 0; i < note.content.length; i += MAX_TEXT) chunks.push(note.content.slice(i, i + MAX_TEXT))
+  for (let i = 0; i < note.content.length; ) {
+    let end = Math.min(i + MAX_TEXT, note.content.length)
+    if (end < note.content.length && isHighSurrogate(note.content.charCodeAt(end - 1))) end -= 1
+    chunks.push(note.content.slice(i, end))
+    i = end
+  }
   if (chunks.length === 0) chunks.push('')
   if (chunks.length > MAX_BLOCKS) {
     chunks = chunks.slice(0, MAX_BLOCKS - 1)

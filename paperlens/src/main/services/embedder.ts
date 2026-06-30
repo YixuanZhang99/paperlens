@@ -21,6 +21,10 @@ type Pending = { resolve: (v: Float32Array[]) => void; reject: (e: Error) => voi
 // onnxruntime-node 在 Electron 的 Node 运行时连续推理约十几次后会 SIGTRAP（纯 Node 无此问题）。
 // 在触发前主动回收 worker（重启，模型已缓存重载仅 ~1s），从根上避开崩溃；崩溃恢复作为兜底。
 const RECYCLE_AFTER_TEXTS = 256
+// 单次请求超时兜底：worker 静默卡死（首次下载半开 TCP / onnxruntime 原生 hang 而不 crash）时
+// 不会触发 exit，pending Promise 永不 settle → kb:ask/回填会永久挂起。超时则杀掉卡死 worker 并拒绝。
+// 取较大值以容纳首次模型下载（~1-2 分钟）。
+const REQUEST_TIMEOUT_MS = 180_000
 
 export function createEmbedder(opts: { cacheDir: string; workerPath: string; mirrorHost?: string }): Embedder {
   let child: UtilityProcess | null = null
@@ -63,7 +67,13 @@ export function createEmbedder(opts: { cacheDir: string; workerPath: string; mir
     if (embedsSinceSpawn >= RECYCLE_AFTER_TEXTS) recycle() // 触发崩溃前主动重启
     return new Promise<Float32Array[]>((resolve, reject) => {
       const id = nextId++
-      pending.set(id, { resolve, reject })
+      const timer = setTimeout(() => {
+        if (pending.delete(id)) { recycle(); reject(new Error('embed request timeout')) } // 杀掉卡死 worker，下次自动重建
+      }, REQUEST_TIMEOUT_MS)
+      pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v) },
+        reject: (e) => { clearTimeout(timer); reject(e) },
+      })
       embedsSinceSpawn += texts.length
       ensureChild().postMessage({ id, texts, cacheDir: opts.cacheDir, mirror: opts.mirrorHost || MIRROR })
     })

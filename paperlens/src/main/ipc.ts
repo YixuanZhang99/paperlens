@@ -238,10 +238,14 @@ export function registerIpc(c: Container) {
     const scoped = !!args.collectionKey
     const pool = scoped ? 80 : 24
     let hits = searchChunks(c.db, terms, pool)
-    // 语义召回（可在设置关闭；模型未就绪/下载失败则静默回退到仅关键词）
+    // 语义召回（可在设置关闭；模型未就绪/下载失败/worker 卡死则静默回退到仅关键词）
     if (c.configStore.get().semanticSearch !== false) {
       try {
-        const qvec = await c.embedder.embedQuery(args.question)
+        // 给用户侧问答一个短超时：模型还在后台下载/嵌入时不让这次提问久等，直接回退关键词
+        const qvec = await Promise.race([
+          c.embedder.embedQuery(args.question),
+          new Promise<Float32Array>((_, rej) => setTimeout(() => rej(new Error('embed timeout')), 20_000)),
+        ])
         const vhits = searchVector(c.db, qvec, pool)
         const seen = new Set(hits.map(h => h.id))
         for (const v of vhits) if (!seen.has(v.id)) { hits.push(v); seen.add(v.id) }

@@ -26,7 +26,7 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
     localStorage.getItem('pl.kb.tab') === 'index' ? 'index' : 'notes')
   const [notes, setNotes] = useState<Note[]>([])
   const [papersByKey, setPapersByKey] = useState<Map<string, Paper>>(new Map())
-  const [syncing, setSyncing] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState<Set<string>>(new Set())
   const [keyword, setKeyword] = useState(() => localStorage.getItem('pl.kb.keyword') ?? '')
   const [activeTag, setActiveTag] = useState<string | null>(() => localStorage.getItem('pl.kb.tag') || null)
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
@@ -196,14 +196,14 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
   async function syncNoteToNotion(noteId: string, paperKey: string) {
     const paper = papersByKey.get(paperKey)
     if (!paper) { setError('未找到该论文的元数据，无法同步 Notion'); return }
-    if (syncing) return
-    setError(null); setSyncing(noteId)
+    if (syncing.has(noteId)) return // 仅拦重复点同一条；不同笔记可并发
+    setError(null); setSyncing(s => new Set(s).add(noteId))
     try {
       await window.api.syncNote({ noteId, paper })
       setNotes(await window.api.listAllNotes())
     } catch (e) {
       setError('同步到 Notion 失败：' + errMsg(e))
-    } finally { setSyncing(null) }
+    } finally { setSyncing(s => { const n = new Set(s); n.delete(noteId); return n }) }
   }
 
   async function deleteNote(id: string) {
@@ -353,8 +353,8 @@ export function KnowledgeView({ onOpenPaper }: { onOpenPaper: (paperKey: string,
                     ? <span className="synced-badge">✓ 已同步 Notion</span>
                     : <button
                         onClick={e => { e.stopPropagation(); syncNoteToNotion(n.id, n.paperKey) }}
-                        disabled={syncing === n.id}>
-                        {syncing === n.id ? '同步中…' : '同步到 Notion'}
+                        disabled={syncing.has(n.id)}>
+                        {syncing.has(n.id) ? '同步中…' : '同步到 Notion'}
                       </button>}
                   <button
                     className={confirmDel === n.id ? 'btn-danger' : ''}

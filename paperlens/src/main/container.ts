@@ -52,6 +52,7 @@ export function createContainer() {
     genId: () => randomUUID(),
   })
   // 本地语义嵌入（推理在 utilityProcess 子进程；模型下载到 userData/models，走 hf-mirror）
+  // worker 随 out/** 打入 app.asar；Electron 32 实测可直接从 asar 内路径 fork（已真机验证嵌入正常）。
   const embedder = createEmbedder({
     cacheDir: join(userData, 'models'),
     workerPath: fileURLToPath(new URL('./embedder-worker.js', import.meta.url)),

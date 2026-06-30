@@ -76,4 +76,24 @@ describe('noteToNotionPage', () => {
     expect(page.children.length).toBeLessThanOrEqual(100)
     expect(page.children.at(-1)!.paragraph.rich_text[0].text.content).toContain('已截断')
   })
+
+  it('never leaves a lone surrogate when clamping/splitting at the 2000 boundary (emoji safe)', () => {
+    const endsWithHighSurrogate = (s: string) => {
+      const c = s.charCodeAt(s.length - 1)
+      return c >= 0xd800 && c <= 0xdbff
+    }
+    // clamp 标题：1999×T + 😀(2 code unit) 超 2000 → 回退到 1999，不留半个 emoji
+    const title = 'T'.repeat(1999) + '😀'
+    const tOut = noteToNotionPage(note, { ...paper, title }, 'db').properties.Title.title[0].text.content
+    expect(tOut.length).toBe(1999)
+    expect(endsWithHighSurrogate(tOut)).toBe(false)
+    // 正文分块：emoji 跨 2000 边界 → 整体挪到下一块；第一块在 emoji 前停下，joined 无损
+    const content = 'A'.repeat(1999) + '😀' + 'B'.repeat(5)
+    const cs = noteToNotionPage({ ...note, content }, paper, 'db').children.map(
+      (b) => b.paragraph.rich_text[0].text.content,
+    )
+    expect(cs[0].length).toBe(1999)
+    expect(endsWithHighSurrogate(cs[0])).toBe(false)
+    expect(cs.join('')).toBe(content)
+  })
 })
