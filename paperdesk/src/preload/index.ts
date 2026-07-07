@@ -21,6 +21,14 @@ const api = {
   addPaperManual: (m: { title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }): Promise<Paper> =>
     ipcRenderer.invoke('paper:addManual', m),
   attachPaperPdf: (paperKey: string, bytes: ArrayBuffer): Promise<void> => ipcRenderer.invoke('paper:attachPdf', { paperKey, bytes }),
+  addFolder: (f: { name: string; parentId?: string | null }): Promise<ZoteroCollection> => ipcRenderer.invoke('folder:add', f),
+  renameFolder: (id: string, name: string): Promise<void> => ipcRenderer.invoke('folder:rename', { id, name }),
+  deleteFolder: (id: string): Promise<void> => ipcRenderer.invoke('folder:delete', id),
+  updatePaper: (a: { key: string; title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }): Promise<void> =>
+    ipcRenderer.invoke('paper:update', a),
+  deletePaper: (paperKey: string): Promise<void> => ipcRenderer.invoke('paper:delete', paperKey),
+  getPaperFolders: (paperKey: string): Promise<string[]> => ipcRenderer.invoke('paper:folders', paperKey),
+  setPaperFolders: (paperKey: string, folderIds: string[]): Promise<void> => ipcRenderer.invoke('paper:setFolders', { paperKey, folderIds }),
   listCollections: (): Promise<ZoteroCollection[]> => ipcRenderer.invoke('zotero:collections'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),
   getPaperTextPaged: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:textPaged', paper),

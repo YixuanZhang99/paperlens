@@ -387,6 +387,41 @@ export function registerIpc(c: Container) {
     pagedTextCache.delete(a.paperKey)
   })
 
+  // —— 管理(L3)：文件夹 CRUD、论文编辑/归属/级联删除 ——
+  ipcMain.handle('folder:add', (_e, f: { name: string; parentId?: string | null }) => {
+    if (!f.name.trim()) throw new Error('文件夹名不能为空')
+    return c.library.addFolder({ name: f.name.trim(), parentId: f.parentId ?? null })
+  })
+  ipcMain.handle('folder:rename', (_e, a: { id: string; name: string }) => {
+    if (!a.name.trim()) throw new Error('文件夹名不能为空')
+    c.library.renameFolder(a.id, a.name.trim())
+  })
+  ipcMain.handle('folder:delete', (_e, id: string) => c.library.deleteFolder(id))
+
+  ipcMain.handle('paper:update', (_e, a: { key: string; title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }) => {
+    if (!a.title.trim()) throw new Error('标题不能为空')
+    c.library.updatePaper(a.key, { title: a.title.trim(), authors: a.authors, year: a.year, abstract: a.abstract, doi: a.doi ?? null })
+  })
+  ipcMain.handle('paper:folders', (_e, paperKey: string) => c.library.getPaperFolders(paperKey))
+  ipcMain.handle('paper:setFolders', (_e, a: { paperKey: string; folderIds: string[] }) =>
+    c.library.setPaperFolders(a.paperKey, a.folderIds))
+
+  // 删除论文：级联清笔记/高亮/对话/索引块(FTS 触发器同步)/正文缓存/归属 + PDF 文件
+  ipcMain.handle('paper:delete', (_e, paperKey: string) => {
+    const pdfFile = c.library.getPdfFile(paperKey)
+    const cascade = c.db.transaction((key: string) => {
+      c.db.prepare('DELETE FROM notes WHERE paper_key = ?').run(key)
+      c.db.prepare('DELETE FROM highlights WHERE paper_key = ?').run(key)
+      c.db.prepare('DELETE FROM chat_messages WHERE paper_key = ?').run(key)
+      c.db.prepare('DELETE FROM chunks WHERE paper_key = ?').run(key)
+      c.db.prepare('DELETE FROM pdf_cache WHERE attachment_key = ?').run(key)
+    })
+    cascade(paperKey)
+    c.library.deletePaper(paperKey)
+    pagedTextCache.delete(paperKey)
+    if (pdfFile) { try { fs.unlinkSync(join(c.libraryDir, pdfFile)) } catch { /* 文件已不存在 */ } }
+  })
+
   // —— 一次性迁移(L1)：① 旧 PaperLens 整库搬迁 ② Zotero 文献导入 ——
   let migrating = false
   ipcMain.handle('migrate:status', () => {
