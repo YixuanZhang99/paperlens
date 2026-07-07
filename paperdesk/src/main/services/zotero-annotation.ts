@@ -4,7 +4,7 @@ import type { Highlight } from '@shared/types'
  * Zotero PDF annotation helpers.
  *
  * Zotero 6+ 把 PDF 高亮/笔记存为 itemType='annotation' 的子条目（parentItem = PDF 附件）。
- * 本模块把 PaperLens 的 Highlight 映射成 Zotero Web API 创建条目所需的 JSON。
+ * 本模块把 PaperDesk 的 Highlight 映射成 Zotero Web API 创建条目所需的 JSON。
  * 参考字段：annotationType / annotationText / annotationComment / annotationColor /
  * annotationPageLabel / annotationSortIndex / annotationPosition。
  */

@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
-const OUT = '/Users/zhangyixuan06/work/paperlens/build/icon-1024.png'
+const OUT = '/Users/zhangyixuan06/work/paperdesk/build/icon-1024.png'
 
 const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
@@ -84,7 +84,7 @@ const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" heig
 </svg>`
 
 app.whenReady().then(async () => {
-  mkdirSync('/Users/zhangyixuan06/work/paperlens/build', { recursive: true })
+  mkdirSync('/Users/zhangyixuan06/work/paperdesk/build', { recursive: true })
   const win = new BrowserWindow({ width: 1024, height: 1024, show: false })
   const page = `<!doctype html><html><head><meta charset="utf-8">
     <style>html,body{margin:0;padding:0;background:transparent}</style></head>

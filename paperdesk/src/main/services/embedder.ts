@@ -39,7 +39,7 @@ export function createEmbedder(opts: { cacheDir: string; workerPath: string; mir
 
   function ensureChild(): UtilityProcess {
     if (child) return child
-    const c = utilityProcess.fork(opts.workerPath, [], { serviceName: 'paperlens-embedder' })
+    const c = utilityProcess.fork(opts.workerPath, [], { serviceName: 'paperdesk-embedder' })
     c.on('message', (msg: { id: number; ok: boolean; flat?: Float32Array; dim?: number; n?: number; error?: string }) => {
       const p = pending.get(msg.id)
       if (!p) return

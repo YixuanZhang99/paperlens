@@ -98,7 +98,7 @@ export function App() {
         {navOpen ? (
           <>
             <div className="nav-header">
-              <span className="nav-brand">Paper<span className="accent">Lens</span></span>
+              <span className="nav-brand">Paper<span className="accent">Desk</span></span>
               <div style={{ display: 'flex', gap: 2 }}>
                 <button className="btn-ghost" onClick={() => setShowKb(true)}>🧠 知识库</button>
                 <button className="btn-ghost" onClick={() => setShowSettings(true)}>⚙ 设置</button>

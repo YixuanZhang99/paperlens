@@ -24,8 +24,8 @@ process.on('uncaughtException', (e) => console.log('DRIVE_UNCAUGHT', e && e.mess
 // When electron is launched with a bare script path it does NOT read package.json,
 // so app name defaults to "Electron" and userData points at .../Electron — where the
 // app's config.enc does NOT live. Pin both to the real app identity BEFORE booting.
-app.setName('paperlens')
-app.setPath('userData', join(app.getPath('appData'), 'paperlens'))
+app.setName('paperdesk')
+app.setPath('userData', join(app.getPath('appData'), 'paperdesk'))
 
 // boot the real app (its whenReady handler registers ipc + creates the window;
 // the module's top level has no awaits, so this import resolves pre-ready)

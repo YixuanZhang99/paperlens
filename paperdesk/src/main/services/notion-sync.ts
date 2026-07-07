@@ -38,7 +38,7 @@ export function noteToNotionPage(note: Note, paper: Paper, databaseId: string) {
   if (chunks.length === 0) chunks.push('')
   if (chunks.length > MAX_BLOCKS) {
     chunks = chunks.slice(0, MAX_BLOCKS - 1)
-    chunks.push('（内容较长，已截断；完整内容见 PaperLens 应用内笔记）')
+    chunks.push('（内容较长，已截断；完整内容见 PaperDesk 应用内笔记）')
   }
 
   return {
