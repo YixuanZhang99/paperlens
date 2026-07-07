@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, app } from 'electron'
 import fs from 'node:fs'
 import { join } from 'node:path'
 import type { Container } from './container'
@@ -6,6 +6,8 @@ import { extractPdfText } from './services/pdf-service'
 import { buildMessages, buildDeepReadMessages, buildTagMessages, parseTags, buildFollowupMessages, parseFollowups } from './services/ai-chat'
 import { chunkPagedText, buildQueryExpansionMessages, parseQueryTerms, buildKbAnswerMessages, buildKbFollowupMessages, buildRerankMessages, parseRerankScores, groupHitsToSources, insertChunks, searchChunks, searchVector, chunksMissingEmbedding, setChunkEmbeddings, embeddingStats, kbStatus, indexedPaperKeys, representativeChunks, buildReviewMapMessages, buildReviewReduceMessages } from './services/kb'
 import { buildAnnotationPayload } from './services/zotero-annotation'
+import { importFromPaperLens, copyModelsDir } from './services/paperlens-import'
+import { importFromZotero } from './services/zotero-import'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
 // Zotero sortIndex 的「距页顶」只影响侧栏排序（标注在 PDF 上的落点由 annotationPosition 精确给出）。
@@ -311,5 +313,56 @@ export function registerIpc(c: Container) {
       (delta, kind) => event.sender.send('kb:review-token', delta, kind),
     )
     return { content, papers: items.length, skipped }
+  })
+
+  // —— 一次性迁移(L1)：① 旧 PaperLens 整库搬迁 ② Zotero 文献导入 ——
+  let migrating = false
+  ipcMain.handle('migrate:status', () => {
+    const oldDb = join(app.getPath('appData'), 'paperlens', 'paperlens.db')
+    const cfg = c.configStore.get()
+    return {
+      hasPaperLens: fs.existsSync(oldDb),
+      zoteroConfigured: Boolean(cfg.zoteroApiKey && cfg.zoteroUserId),
+      paperCount: c.library.countPapers(),
+    }
+  })
+
+  ipcMain.handle('migrate:run', async (event) => {
+    if (migrating) throw new Error('迁移已在进行中')
+    migrating = true
+    try {
+      const oldDir = join(app.getPath('appData'), 'paperlens')
+      const oldDb = join(oldDir, 'paperlens.db')
+      let fromPaperLens = false
+      // ① 整库搬迁：仅当目标库还没有笔记与索引(全新库)且旧库存在——避免对已用库做合并语义
+      const notesN = (c.db.prepare('SELECT COUNT(*) AS n FROM notes').get() as { n: number }).n
+      const chunksN = (c.db.prepare('SELECT COUNT(*) AS n FROM chunks').get() as { n: number }).n
+      if (fs.existsSync(oldDb) && notesN === 0 && chunksN === 0) {
+        event.sender.send('migrate:progress', 'paperlens', 0, 1, '搬迁 PaperLens 笔记/高亮/对话/索引…')
+        importFromPaperLens(c.db, oldDb)
+        copyModelsDir(join(oldDir, 'models'), join(app.getPath('userData'), 'models'))
+        fromPaperLens = true
+        event.sender.send('migrate:progress', 'paperlens', 1, 1, 'PaperLens 数据搬迁完成')
+      }
+      // ② Zotero 文献导入(需先在设置里配好 Zotero;未配则跳过)
+      let z = { papers: 0, folders: 0, pdfs: 0, pdfMissing: 0 }
+      const cfg = c.configStore.get()
+      if (cfg.zoteroApiKey && cfg.zoteroUserId) {
+        z = await importFromZotero({
+          repo: c.library,
+          zotero: c.zotero(),
+          zoteroLocal: c.zoteroLocal(),
+          writePdf: (key, bytes) => {
+            const f = `${key}.pdf`
+            fs.writeFileSync(join(c.libraryDir, f), bytes)
+            return f
+          },
+          onProgress: (done, total, title) => event.sender.send('migrate:progress', 'zotero', done, total, title),
+        })
+      }
+      return { fromPaperLens, zoteroConfigured: Boolean(cfg.zoteroApiKey && cfg.zoteroUserId), ...z }
+    } finally {
+      migrating = false
+    }
   })
 }

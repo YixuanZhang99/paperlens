@@ -5,6 +5,16 @@ import type { ChatRecord } from '../main/services/chat-repo'
 const api = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:get'),
   setConfig: (p: Partial<AppConfig>): Promise<AppConfig> => ipcRenderer.invoke('config:set', p),
+  migrateStatus: (): Promise<{ hasPaperLens: boolean; zoteroConfigured: boolean; paperCount: number }> =>
+    ipcRenderer.invoke('migrate:status'),
+  migrateRun: (
+    onProgress: (phase: 'paperlens' | 'zotero', done: number, total: number, label: string) => void,
+  ): Promise<{ fromPaperLens: boolean; zoteroConfigured: boolean; papers: number; folders: number; pdfs: number; pdfMissing: number }> => {
+    const listener = (_e: Electron.IpcRendererEvent, phase: 'paperlens' | 'zotero', done: number, total: number, label: string) =>
+      onProgress(phase, done, total, label)
+    ipcRenderer.on('migrate:progress', listener)
+    return ipcRenderer.invoke('migrate:run').finally(() => ipcRenderer.removeListener('migrate:progress', listener))
+  },
   listPapers: (collectionKey?: string | null): Promise<Paper[]> => ipcRenderer.invoke('zotero:list', collectionKey ?? null),
   listCollections: (): Promise<ZoteroCollection[]> => ipcRenderer.invoke('zotero:collections'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),

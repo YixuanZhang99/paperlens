@@ -8,16 +8,40 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const [error, setError] = useState<string | null>(null)
   const [treeOpen, setTreeOpen] = useState(false) // 文件夹树默认收起，让论文顶在上方
   const [filter, setFilter] = useState('') // 论文即时筛选（标题/作者/年份）
+  // 一次性迁移(L1)：空库时提供「从 PaperLens/Zotero 迁移」入口
+  const [mig, setMig] = useState<{ hasPaperLens: boolean; zoteroConfigured: boolean; paperCount: number } | null>(null)
+  const [migRunning, setMigRunning] = useState(false)
+  const [migProg, setMigProg] = useState('')
+  const [migDone, setMigDone] = useState<{ fromPaperLens: boolean; zoteroConfigured: boolean; papers: number; pdfs: number; pdfMissing: number } | null>(null)
 
   useEffect(() => {
     // 文件夹加载失败不阻塞论文列表（无 collections 时仅显示「全部论文」）
     window.api.listCollections().then(setCollections).catch(() => {})
+    window.api.migrateStatus().then(setMig).catch(() => {})
   }, [])
 
   useEffect(() => {
     setError(null)
-    window.api.listPapers(selectedCol).then(setPapers).catch(() => setError('加载失败，请检查 Zotero 配置'))
+    window.api.listPapers(selectedCol).then(setPapers).catch(() => setError('文献库加载失败'))
   }, [selectedCol])
+
+  async function runMigrate() {
+    setMigRunning(true)
+    setError(null)
+    try {
+      const r = await window.api.migrateRun((phase, done, total, label) =>
+        setMigProg(`${phase === 'paperlens' ? '搬迁 PaperLens 数据' : '导入 Zotero 文献'}：${done}/${total} ${label}`))
+      setMigDone(r)
+      window.api.listCollections().then(setCollections).catch(() => {})
+      setPapers(await window.api.listPapers(selectedCol))
+      window.api.migrateStatus().then(setMig).catch(() => {})
+    } catch (e) {
+      setError('迁移失败：' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setMigRunning(false)
+      setMigProg('')
+    }
+  }
 
   const childrenOf = (key: string | null) => collections.filter(c => c.parentKey === key)
   const hasFolders = collections.length > 0
@@ -93,6 +117,30 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
       <div className="lib-section">论文{shown.length > 0 ? ` · ${shown.length}` : ''}{q && papers.length > 0 ? ` / ${papers.length}` : ''}</div>
       {error ? (
         <div role="alert" className="alert-banner" style={{ margin: 12 }}>{error}</div>
+      ) : papers.length === 0 && selectedCol === null ? (
+        <div className="lib-migrate">
+          <p className="lib-migrate-title">文献库是空的</p>
+          {mig?.hasPaperLens && <p className="empty-hint">检测到旧 PaperLens 的数据（笔记/高亮/对话/知识库索引），可一键搬入。</p>}
+          {mig && !mig.zoteroConfigured && (
+            <p className="empty-hint">如需导入 Zotero 文献，请先到「设置」填写 Zotero User ID 与 API Key（以及本地数据目录）。</p>
+          )}
+          <button className="btn-primary" onClick={runMigrate} disabled={migRunning}>
+            {migRunning
+              ? '迁移中…'
+              : mig?.hasPaperLens
+                ? '🚚 一键迁移（PaperLens 数据 + Zotero 文献）'
+                : '📥 从 Zotero 导入文献'}
+          </button>
+          {migRunning && migProg && <p className="empty-hint">{migProg}</p>}
+          {migDone && (
+            <p className="empty-hint">
+              迁移完成：{migDone.fromPaperLens ? '已搬入 PaperLens 数据；' : ''}
+              {migDone.zoteroConfigured
+                ? `导入 ${migDone.papers} 篇（PDF ${migDone.pdfs} 份${migDone.pdfMissing ? `，缺失 ${migDone.pdfMissing} 份` : ''}）`
+                : 'Zotero 未配置，未导入文献'}
+            </p>
+          )}
+        </div>
       ) : (
         <ul className="paper-list">
           {papers.length === 0 && <li className="empty-hint" style={{ padding: '8px 12px' }}>此文件夹暂无论文</li>}

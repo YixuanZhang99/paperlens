@@ -692,3 +692,8 @@ input::placeholder { color: var(--text-3); }
 .kb-review-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .kb-review select { font-size: 12.5px; padding: 4px 8px; }
 .kb-review-preview { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); max-height: 280px; overflow: auto; }
+
+/* 空库一键迁移(L1) */
+.lib-migrate { display: grid; gap: 10px; padding: 18px 14px; justify-items: start; }
+.lib-migrate-title { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.lib-migrate .empty-hint { margin: 0; }
