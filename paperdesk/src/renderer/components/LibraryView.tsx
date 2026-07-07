@@ -119,7 +119,92 @@ function AddPaperModal({ onClose, onAdded }: { onClose: () => void; onAdded: (p:
   )
 }
 
-export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) => void; selectedKey: string | null }) {
+// 论文编辑弹窗(L3)：元数据 + 文件夹归属 + 删除(级联)合一
+function EditPaperModal({ paper, folders, onClose, onSaved, onDeleted }: {
+  paper: Paper
+  folders: ZoteroCollection[]
+  onClose: () => void
+  onSaved: () => void
+  onDeleted: (key: string) => void
+}) {
+  const [title, setTitle] = useState(paper.title)
+  const [authors, setAuthors] = useState(paper.authors.join(', '))
+  const [year, setYear] = useState(paper.year ? String(paper.year) : '')
+  const [abstract, setAbstract] = useState(paper.abstract)
+  const [memberIds, setMemberIds] = useState<Set<string>>(new Set())
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.api.getPaperFolders(paper.key).then(ids => setMemberIds(new Set(ids))).catch(() => {})
+  }, [paper.key])
+
+  const toggleFolder = (id: string) =>
+    setMemberIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  async function save() {
+    if (!title.trim() || busy) return
+    setBusy(true); setErr(null)
+    try {
+      await window.api.updatePaper({
+        key: paper.key, title: title.trim(),
+        authors: authors.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+        year: year.trim() ? Number(year.trim()) : null,
+        abstract,
+      })
+      await window.api.setPaperFolders(paper.key, [...memberIds])
+      onSaved()
+      onClose()
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  async function del() {
+    if (!confirmDel) { setConfirmDel(true); return }
+    setBusy(true); setErr(null)
+    try {
+      await window.api.deletePaper(paper.key)
+      onDeleted(paper.key)
+      onClose()
+    } catch (e) { setErr(errMsg(e)); setBusy(false) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel edit-paper" role="dialog" aria-modal="true" aria-label="编辑论文" onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>✎ 编辑论文</h3>
+        <input placeholder="标题（必填）" value={title} onChange={e => setTitle(e.target.value)} />
+        <input placeholder="作者（逗号分隔）" value={authors} onChange={e => setAuthors(e.target.value)} />
+        <input placeholder="年份" value={year} onChange={e => setYear(e.target.value)} />
+        <textarea placeholder="摘要" rows={3} value={abstract} onChange={e => setAbstract(e.target.value)} />
+        {folders.length > 0 && (
+          <div className="edit-folders">
+            <div className="edit-folders-title">所属文件夹</div>
+            <div className="edit-folders-list">
+              {folders.map(f => (
+                <label key={f.key} className="edit-folder-check">
+                  <input type="checkbox" checked={memberIds.has(f.key)} onChange={() => toggleFolder(f.key)} />
+                  <span>{f.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {err && <div role="alert" className="alert-banner">{err}</div>}
+        <div className="edit-foot">
+          <button className={confirmDel ? 'btn-danger' : ''} onClick={del} disabled={busy}>
+            {confirmDel ? '确认删除？将同时删除其笔记/高亮/对话与索引' : '删除论文'}
+          </button>
+          <span style={{ flex: 1 }} />
+          <button onClick={onClose} disabled={busy}>取消</button>
+          <button className="btn-primary" onClick={save} disabled={busy || !title.trim()}>{busy ? '保存中…' : '保存'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function LibraryView({ onSelect, selectedKey, onDeleted }: { onSelect: (p: Paper) => void; selectedKey: string | null; onDeleted?: (key: string) => void }) {
   const [collections, setCollections] = useState<ZoteroCollection[]>([])
   const [selectedCol, setSelectedCol] = useState<string | null>(null)
   const [papers, setPapers] = useState<Paper[]>([])
@@ -132,6 +217,43 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const [migProg, setMigProg] = useState('')
   const [migDone, setMigDone] = useState<{ fromPaperLens: boolean; zoteroConfigured: boolean; papers: number; pdfs: number; pdfMissing: number } | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  // 管理(L3)
+  const [editPaper, setEditPaper] = useState<Paper | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameVal, setRenameVal] = useState('')
+  const [confirmDelFolder, setConfirmDelFolder] = useState<string | null>(null)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+
+  const refreshFolders = () => window.api.listCollections().then(setCollections).catch(() => {})
+  const refreshPapers = async () => setPapers(await window.api.listPapers(selectedCol).catch(() => []))
+
+  async function submitRename(id: string) {
+    if (!renameVal.trim()) { setRenamingId(null); return }
+    try { await window.api.renameFolder(id, renameVal.trim()); refreshFolders() }
+    catch (e) { setError('重命名失败：' + errMsg(e)) }
+    setRenamingId(null)
+  }
+
+  async function removeFolder(id: string) {
+    if (confirmDelFolder !== id) { setConfirmDelFolder(id); return }
+    setConfirmDelFolder(null)
+    try {
+      await window.api.deleteFolder(id)
+      if (selectedCol === id) setSelectedCol(null)
+      refreshFolders()
+    } catch (e) { setError('删除文件夹失败：' + errMsg(e)) }
+  }
+
+  async function submitNewFolder() {
+    if (!newFolderName.trim()) { setCreatingFolder(false); return }
+    try {
+      // 当前选中某文件夹时建为其子级,否则建到顶层
+      await window.api.addFolder({ name: newFolderName.trim(), parentId: selectedCol })
+      refreshFolders()
+    } catch (e) { setError('新建文件夹失败：' + errMsg(e)) }
+    setNewFolderName(''); setCreatingFolder(false)
+  }
 
   useEffect(() => {
     // 文件夹加载失败不阻塞论文列表（无 collections 时仅显示「全部论文」）
@@ -182,13 +304,39 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
     const kids = childrenOf(c.key)
     return (
       <li key={c.key}>
-        <button
-          className={'folder-row' + (selectedCol === c.key ? ' selected' : '')}
-          style={{ paddingLeft: 12 + depth * 16 }}
-          onClick={() => pickCol(c.key)}
-        >
-          <span className="folder-icon">{selectedCol === c.key ? '📂' : '📁'}</span>{c.name}
-        </button>
+        {renamingId === c.key ? (
+          <div className="folder-line" style={{ paddingLeft: 12 + depth * 16 }}>
+            <input
+              className="folder-rename-input"
+              autoFocus
+              value={renameVal}
+              onChange={e => setRenameVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitRename(c.key)
+                if (e.key === 'Escape') setRenamingId(null)
+              }}
+              onBlur={() => submitRename(c.key)} />
+          </div>
+        ) : (
+          <div className="folder-line">
+            <button
+              className={'folder-row' + (selectedCol === c.key ? ' selected' : '')}
+              style={{ paddingLeft: 12 + depth * 16 }}
+              onClick={() => pickCol(c.key)}
+            >
+              <span className="folder-icon">{selectedCol === c.key ? '📂' : '📁'}</span>{c.name}
+            </button>
+            <span className="folder-ops">
+              <button className="folder-op" title="重命名" onClick={() => { setRenamingId(c.key); setRenameVal(c.name) }}>✎</button>
+              <button
+                className={'folder-op' + (confirmDelFolder === c.key ? ' danger' : '')}
+                title={confirmDelFolder === c.key ? '再点一次确认删除（论文不会被删）' : '删除文件夹'}
+                onClick={() => removeFolder(c.key)}>
+                {confirmDelFolder === c.key ? '确认?' : '✕'}
+              </button>
+            </span>
+          </div>
+        )}
         {kids.length > 0 && <ul className="folder-children">{kids.map(k => renderFolder(k, depth + 1))}</ul>}
       </li>
     )
@@ -217,6 +365,15 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
         <button className="lib-add-btn" title="添加论文（DOI / arXiv / PDF）" onClick={() => setShowAdd(true)}>＋</button>
       </div>
       {showAdd && <AddPaperModal onClose={() => setShowAdd(false)} onAdded={handleAdded} />}
+      {editPaper && (
+        <EditPaperModal
+          paper={editPaper}
+          folders={collections}
+          onClose={() => setEditPaper(null)}
+          onSaved={() => { refreshPapers() }}
+          onDeleted={key => { refreshPapers(); onDeleted?.(key) }}
+        />
+      )}
       {treeOpen && (
         <ul className="folder-tree">
           <li>
@@ -228,6 +385,25 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
             </button>
           </li>
           {childrenOf(null).map(c => renderFolder(c, 0))}
+          <li className="folder-new">
+            {creatingFolder ? (
+              <input
+                className="folder-rename-input"
+                autoFocus
+                placeholder="新文件夹名…"
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitNewFolder()
+                  if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName('') }
+                }}
+                onBlur={submitNewFolder} />
+            ) : (
+              <button className="folder-row folder-new-btn" onClick={() => setCreatingFolder(true)}>
+                ＋ 新建文件夹{selectedCol ? '（在当前文件夹下）' : ''}
+              </button>
+            )}
+          </li>
         </ul>
       )}
       {papers.length > 0 && (
@@ -284,6 +460,10 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
                 {p.authors.length > 0 && <span className="paper-authors-inline">{p.authors.join(', ')}</span>}
                 {p.year ? <span className="paper-year">{p.year}</span> : null}
               </div>
+              <button
+                className="paper-edit-btn"
+                title="编辑论文"
+                onClick={e => { e.stopPropagation(); setEditPaper(p) }}>✎</button>
             </li>
           ))}
         </ul>

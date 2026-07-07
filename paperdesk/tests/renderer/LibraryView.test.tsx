@@ -159,4 +159,67 @@ describe('LibraryView', () => {
     expect(await screen.findByText(/请先到「设置」填写 Zotero/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /从 Zotero 导入文献/ })).toBeInTheDocument()
   })
+
+  it('folder management: create, rename, and two-step delete', async () => {
+    const addFolder = vi.fn(async () => ({ key: 'NF1', name: '新夹', parentKey: null }))
+    const renameFolder = vi.fn(async () => undefined)
+    const deleteFolder = vi.fn(async () => undefined)
+    ;(window as any).api = baseApi({
+      listCollections: vi.fn(async () => collections),
+      addFolder, renameFolder, deleteFolder,
+    })
+    render(<LibraryView onSelect={vi.fn()} selectedKey={null} />)
+    await screen.findByText('Transformer')
+    fireEvent.click(screen.getByTitle('切换文件夹'))
+
+    // 新建
+    fireEvent.click(await screen.findByRole('button', { name: /新建文件夹/ }))
+    fireEvent.change(screen.getByPlaceholderText('新文件夹名…'), { target: { value: '新夹' } })
+    fireEvent.keyDown(screen.getByPlaceholderText('新文件夹名…'), { key: 'Enter' })
+    await waitFor(() => expect(addFolder).toHaveBeenCalledWith({ name: '新夹', parentId: null }))
+
+    // 重命名(树上「机器学习」那行)
+    fireEvent.click(screen.getAllByTitle('重命名')[0])
+    const input = screen.getByDisplayValue('机器学习')
+    fireEvent.change(input, { target: { value: 'ML' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(renameFolder).toHaveBeenCalledWith('C1', 'ML'))
+
+    // 两步删除
+    fireEvent.click(screen.getAllByTitle('删除文件夹')[0])
+    expect(deleteFolder).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认?' }))
+    await waitFor(() => expect(deleteFolder).toHaveBeenCalledWith('C1'))
+  })
+
+  it('edit paper modal: saves metadata + memberships; two-step delete cascades and notifies', async () => {
+    const updatePaper = vi.fn(async () => undefined)
+    const setPaperFolders = vi.fn(async () => undefined)
+    const deletePaper = vi.fn(async () => undefined)
+    const onDeleted = vi.fn()
+    ;(window as any).api = baseApi({
+      listCollections: vi.fn(async () => collections),
+      getPaperFolders: vi.fn(async () => ['C1']),
+      updatePaper, setPaperFolders, deletePaper,
+    })
+    render(<LibraryView onSelect={vi.fn()} selectedKey={null} onDeleted={onDeleted} />)
+    await screen.findByText('Transformer')
+
+    fireEvent.click(screen.getAllByTitle('编辑论文')[0])
+    const title = await screen.findByDisplayValue('Transformer')
+    fireEvent.change(title, { target: { value: 'Transformer v2' } })
+    // 勾上 LLM(C2)
+    fireEvent.click(await screen.findByRole('checkbox', { name: /LLM/ }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(updatePaper).toHaveBeenCalledWith(expect.objectContaining({ key: 'P1', title: 'Transformer v2' })))
+    await waitFor(() => expect(setPaperFolders).toHaveBeenCalledWith('P1', expect.arrayContaining(['C1', 'C2'])))
+
+    // 再开编辑做两步删除
+    fireEvent.click(screen.getAllByTitle('编辑论文')[0])
+    fireEvent.click(await screen.findByRole('button', { name: '删除论文' }))
+    expect(deletePaper).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /确认删除？/ }))
+    await waitFor(() => expect(deletePaper).toHaveBeenCalledWith('P1'))
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('P1'))
+  })
 })

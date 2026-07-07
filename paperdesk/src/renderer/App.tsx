@@ -106,7 +106,10 @@ export function App() {
               </div>
             </div>
             <div className="nav-scroll">
-              <LibraryView onSelect={setSelected} selectedKey={selected?.key ?? null} />
+              <LibraryView
+                onSelect={setSelected}
+                selectedKey={selected?.key ?? null}
+                onDeleted={key => { if (selected?.key === key) setSelected(null) }} />
             </div>
           </>
         ) : (

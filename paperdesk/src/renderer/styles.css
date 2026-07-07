@@ -722,3 +722,36 @@ input::placeholder { color: var(--text-3); }
 .add-draft { display: grid; gap: 8px; padding: 10px; background: var(--surface-2); border-radius: var(--radius-sm); }
 .add-manual { display: grid; gap: 8px; }
 .add-foot { display: flex; justify-content: flex-end; }
+
+/* 管理(L3)：文件夹行内操作 + 论文编辑 */
+.folder-line { display: flex; align-items: center; }
+.folder-line .folder-row { flex: 1; min-width: 0; }
+.folder-ops { display: none; flex: none; gap: 2px; padding-right: 6px; }
+.folder-line:hover .folder-ops { display: flex; }
+.folder-op {
+  font-size: 11px; padding: 2px 6px; border-radius: 6px;
+  border: none; background: transparent; color: var(--text-3);
+}
+.folder-op:hover { background: var(--surface-2); color: var(--text); }
+.folder-op.danger { color: var(--red, #d33); font-weight: 600; }
+.folder-rename-input { width: 100%; font-size: 12.5px; padding: 5px 8px; margin: 2px 8px 2px 0; }
+.folder-new-btn { color: var(--text-3); font-size: 12px; }
+.paper-item { position: relative; }
+.paper-edit-btn {
+  position: absolute; top: 8px; right: 8px; display: none;
+  font-size: 11.5px; padding: 2px 7px; border-radius: 6px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2);
+}
+.paper-item:hover .paper-edit-btn { display: block; }
+.edit-paper { display: grid; gap: 10px; width: min(520px, 92vw); }
+.edit-paper textarea { resize: vertical; }
+.edit-folders { display: grid; gap: 6px; }
+.edit-folders-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.edit-folders-list {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; max-height: 140px; overflow: auto;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.edit-folder-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+.edit-folder-check input { accent-color: var(--accent); }
+.edit-foot { display: flex; gap: 8px; align-items: center; }
+.btn-danger { background: var(--red, #d33); color: #fff; border-color: transparent; }
