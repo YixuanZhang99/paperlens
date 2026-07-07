@@ -16,6 +16,11 @@ const api = {
     return ipcRenderer.invoke('migrate:run').finally(() => ipcRenderer.removeListener('migrate:progress', listener))
   },
   listPapers: (collectionKey?: string | null): Promise<Paper[]> => ipcRenderer.invoke('zotero:list', collectionKey ?? null),
+  addPaperByRef: (input: string): Promise<{ paper: Paper; pdf: boolean }> => ipcRenderer.invoke('paper:addByRef', input),
+  sniffPdf: (bytes: ArrayBuffer): Promise<{ titleGuess: string }> => ipcRenderer.invoke('paper:sniffPdf', bytes),
+  addPaperManual: (m: { title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }): Promise<Paper> =>
+    ipcRenderer.invoke('paper:addManual', m),
+  attachPaperPdf: (paperKey: string, bytes: ArrayBuffer): Promise<void> => ipcRenderer.invoke('paper:attachPdf', { paperKey, bytes }),
   listCollections: (): Promise<ZoteroCollection[]> => ipcRenderer.invoke('zotero:collections'),
   getPaperText: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:text', paper),
   getPaperTextPaged: (paper: Paper): Promise<string> => ipcRenderer.invoke('paper:textPaged', paper),

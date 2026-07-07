@@ -8,6 +8,8 @@ import { chunkPagedText, buildQueryExpansionMessages, parseQueryTerms, buildKbAn
 import { buildAnnotationPayload } from './services/zotero-annotation'
 import { importFromPaperLens, copyModelsDir } from './services/paperlens-import'
 import { importFromZotero } from './services/zotero-import'
+import { parseRefInput, fetchArxivMeta, fetchCrossrefMeta } from './services/metadata-fetch'
+import { randomUUID } from 'node:crypto'
 import type { AppConfig, ChatMessage, Paper } from '@shared/types'
 
 // Zotero sortIndex 的「距页顶」只影响侧栏排序（标注在 PDF 上的落点由 annotationPosition 精确给出）。
@@ -313,6 +315,76 @@ export function registerIpc(c: Container) {
       (delta, kind) => event.sender.send('kb:review-token', delta, kind),
     )
     return { content, papers: items.length, skipped }
+  })
+
+  // —— 入库(L2)：DOI/arXiv 引用入库、拖 PDF 入库、手动元数据 ——
+  const genPaperKey = (): string => {
+    for (;;) {
+      const key = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+      if (!c.db.prepare('SELECT 1 FROM lib_papers WHERE key = ?').get(key)) return key
+    }
+  }
+  const paperByKey = (key: string): Paper => {
+    const p = c.library.listPapers().find(x => x.key === key)
+    if (!p) throw new Error('论文入库后读取失败')
+    return p
+  }
+
+  // 粘贴 DOI/arXiv 号(或链接)→ 拉元数据入库;arXiv 顺带自动下载 PDF(失败不阻塞,pdf:false)
+  ipcMain.handle('paper:addByRef', async (_e, input: string) => {
+    const ref = parseRefInput(input)
+    if (ref.kind === 'unknown') throw new Error('无法识别输入。请粘贴 DOI(10.xxxx/…)或 arXiv 编号(如 2405.12345)/链接')
+    const meta = ref.kind === 'arxiv' ? await fetchArxivMeta(ref.id, fetch) : await fetchCrossrefMeta(ref.doi, fetch)
+    const key = genPaperKey()
+    c.library.upsertPaper({
+      key, title: meta.title, authors: meta.authors, year: meta.year, abstract: meta.abstract,
+      doi: meta.doi, arxivId: meta.arxivId,
+    })
+    let pdf = false
+    if (meta.pdfUrl) {
+      try {
+        const res = await fetch(meta.pdfUrl)
+        if (res.ok) {
+          const bytes = new Uint8Array(await res.arrayBuffer())
+          if (bytes.length > 1000) {
+            fs.writeFileSync(join(c.libraryDir, `${key}.pdf`), bytes)
+            c.library.setPaperPdf(key, `${key}.pdf`)
+            pdf = true
+          }
+        }
+      } catch { /* PDF 下载失败 → 条目保留,可稍后拖 PDF 补 */ }
+    }
+    return { paper: paperByKey(key), pdf }
+  })
+
+  // 拖入 PDF 前的标题猜测:首页文本首行
+  ipcMain.handle('paper:sniffPdf', async (_e, bytes: ArrayBuffer) => {
+    try {
+      const text = await extractPdfText(new Uint8Array(bytes), { maxChars: 600 })
+      const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length > 3) ?? ''
+      return { titleGuess: firstLine.slice(0, 120) }
+    } catch {
+      return { titleGuess: '' }
+    }
+  })
+
+  // 手动元数据入库(拉取失败兜底 / 拖 PDF 的确认框)
+  ipcMain.handle('paper:addManual', async (_e, m: { title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }) => {
+    if (!m.title.trim()) throw new Error('标题不能为空')
+    const key = genPaperKey()
+    c.library.upsertPaper({ key, title: m.title.trim(), authors: m.authors, year: m.year, abstract: m.abstract, doi: m.doi ?? null })
+    return paperByKey(key)
+  })
+
+  // 给论文挂 PDF(拖入):写 library/<key>.pdf 并失效正文缓存
+  ipcMain.handle('paper:attachPdf', async (_e, a: { paperKey: string; bytes: ArrayBuffer }) => {
+    const bytes = new Uint8Array(a.bytes)
+    if (bytes.length < 100) throw new Error('PDF 文件无效')
+    const file = `${a.paperKey}.pdf`
+    fs.writeFileSync(join(c.libraryDir, file), bytes)
+    c.library.setPaperPdf(a.paperKey, file)
+    c.db.prepare('DELETE FROM pdf_cache WHERE attachment_key = ?').run(a.paperKey)
+    pagedTextCache.delete(a.paperKey)
   })
 
   // —— 一次性迁移(L1)：① 旧 PaperLens 整库搬迁 ② Zotero 文献导入 ——
