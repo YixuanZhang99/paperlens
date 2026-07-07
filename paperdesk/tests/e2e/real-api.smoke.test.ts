@@ -180,8 +180,8 @@ describe.skipIf(!(hasZotero || hasDeepSeek || hasNotion))('REAL API smoke', () =
           const paper = { key: 'P', title: paperTitle, authors: ['Mo, Kaixiang', 'Shi, Yuxin'], year: 2025, abstract: '', attachmentKey: null }
           const note = {
             id: 'e2e-1', paperKey: 'P', notionPageId: null, createdAt: 1700000000000,
-            tags: ['e2e', 'paperlens'],
-            content: '[PaperLens E2E 测试页 — 可删除] 本笔记由端到端验证写入，验证 Notion 结构化同步（Title/Authors/Year/Tags + 正文）。',
+            tags: ['e2e', 'paperdesk'],
+            content: '[PaperDesk E2E 测试页 — 可删除] 本笔记由端到端验证写入，验证 Notion 结构化同步（Title/Authors/Year/Tags + 正文）。',
           }
           const pageId = await sync.sync(note, paper)
           log(`Notion WRITE: ✓ created page → ${pageId}`)
