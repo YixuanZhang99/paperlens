@@ -1,6 +1,124 @@
 import { useEffect, useState } from 'react'
 import type { Paper, ZoteroCollection } from '@shared/types'
 
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+// 入库弹窗(L2)：贴 DOI/arXiv 号自动拉元数据(arXiv 顺带下 PDF)、拖 PDF 猜标题、手动填写兜底。
+// 不自动关闭——可连续添加,「完成」退出;每次成功通过 onAdded 让父组件刷新并选中新论文。
+function AddPaperModal({ onClose, onAdded }: { onClose: () => void; onAdded: (p: Paper) => void }) {
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [mTitle, setMTitle] = useState('')
+  const [mAuthors, setMAuthors] = useState('')
+  const [mYear, setMYear] = useState('')
+  const [draft, setDraft] = useState<{ bytes: ArrayBuffer; title: string; filename: string } | null>(null)
+
+  async function addByRef() {
+    if (!input.trim() || busy) return
+    setBusy(true); setErr(null); setOk(null)
+    try {
+      const r = await window.api.addPaperByRef(input.trim())
+      setOk(`已加入「${r.paper.title}」${r.pdf ? '（PDF 已自动下载）' : '（未获取到 PDF，可拖入补上）'}`)
+      setInput('')
+      onAdded(r.paper)
+    } catch (e) {
+      setErr(errMsg(e))
+      setManualOpen(true) // 拉取失败 → 展开手动兜底
+    } finally { setBusy(false) }
+  }
+
+  async function pickPdf(file: File) {
+    setErr(null); setOk(null); setBusy(true)
+    try {
+      const bytes = await file.arrayBuffer()
+      const { titleGuess } = await window.api.sniffPdf(bytes)
+      setDraft({ bytes, title: titleGuess || file.name.replace(/\.pdf$/i, ''), filename: file.name })
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  async function addDraft() {
+    if (!draft || !draft.title.trim() || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const p = await window.api.addPaperManual({ title: draft.title.trim(), authors: [], year: null, abstract: '' })
+      await window.api.attachPaperPdf(p.key, draft.bytes)
+      setOk(`已加入「${p.title}」（含 PDF）`)
+      setDraft(null)
+      onAdded(p)
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  async function addManual() {
+    if (!mTitle.trim() || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const p = await window.api.addPaperManual({
+        title: mTitle.trim(),
+        authors: mAuthors.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+        year: mYear.trim() ? Number(mYear.trim()) : null,
+        abstract: '',
+      })
+      setOk(`已加入「${p.title}」（无 PDF，可拖入补上）`)
+      setMTitle(''); setMAuthors(''); setMYear('')
+      onAdded(p)
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel add-paper" role="dialog" aria-modal="true" aria-label="添加论文" onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>＋ 添加论文</h3>
+        <div className="add-row">
+          <input
+            placeholder="粘贴 DOI / arXiv 编号或链接，如 2405.12345"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addByRef() }} />
+          <button className="btn-primary" onClick={addByRef} disabled={busy || !input.trim()}>{busy ? '处理中…' : '获取并加入'}</button>
+        </div>
+        <div
+          className="add-drop"
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) pickPdf(f) }}>
+          把 PDF 拖到这里，或
+          <label className="add-file-btn">
+            选择 PDF 文件
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              hidden
+              onChange={e => { const f = e.target.files?.[0]; if (f) pickPdf(f); e.currentTarget.value = '' }} />
+          </label>
+        </div>
+        {draft && (
+          <div className="add-draft">
+            <span className="empty-hint">已读取 {draft.filename}，确认标题：</span>
+            <input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} />
+            <button className="btn-primary" onClick={addDraft} disabled={busy || !draft.title.trim()}>加入文献库</button>
+          </div>
+        )}
+        {err && <div role="alert" className="alert-banner">{err}</div>}
+        {ok && <p className="empty-hint" style={{ margin: 0 }}>✓ {ok}</p>}
+        <button className="btn-ghost" style={{ justifySelf: 'start' }} onClick={() => setManualOpen(o => !o)}>
+          {manualOpen ? '收起手动填写' : '手动填写元数据'}
+        </button>
+        {manualOpen && (
+          <div className="add-manual">
+            <input placeholder="标题（必填）" value={mTitle} onChange={e => setMTitle(e.target.value)} />
+            <input placeholder="作者（逗号分隔，可空）" value={mAuthors} onChange={e => setMAuthors(e.target.value)} />
+            <input placeholder="年份（可空）" value={mYear} onChange={e => setMYear(e.target.value)} />
+            <button className="btn-primary" onClick={addManual} disabled={busy || !mTitle.trim()}>加入文献库</button>
+          </div>
+        )}
+        <div className="add-foot"><button onClick={onClose}>完成</button></div>
+      </div>
+    </div>
+  )
+}
+
 export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) => void; selectedKey: string | null }) {
   const [collections, setCollections] = useState<ZoteroCollection[]>([])
   const [selectedCol, setSelectedCol] = useState<string | null>(null)
@@ -13,6 +131,7 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
   const [migRunning, setMigRunning] = useState(false)
   const [migProg, setMigProg] = useState('')
   const [migDone, setMigDone] = useState<{ fromPaperLens: boolean; zoteroConfigured: boolean; papers: number; pdfs: number; pdfMissing: number } | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     // 文件夹加载失败不阻塞论文列表（无 collections 时仅显示「全部论文」）
@@ -75,20 +194,29 @@ export function LibraryView({ onSelect, selectedKey }: { onSelect: (p: Paper) =>
     )
   }
 
+  async function handleAdded(p: Paper) {
+    setPapers(await window.api.listPapers(selectedCol))
+    onSelect(p)
+  }
+
   return (
     <div className="library">
-      {/* 当前文件夹（一行）：点击展开/收起文件夹树 */}
-      <button
-        className={'folder-current' + (treeOpen ? ' open' : '')}
-        onClick={() => hasFolders && setTreeOpen(o => !o)}
-        disabled={!hasFolders}
-        title={hasFolders ? '切换文件夹' : undefined}
-      >
-        <span className="folder-current-name">
-          <span className="folder-icon">{selectedCol === null ? '📚' : '📂'}</span>{currentName}
-        </span>
-        {hasFolders && <span className="folder-chevron">▾</span>}
-      </button>
+      {/* 顶栏：当前文件夹（点击展开树）+ 添加论文 */}
+      <div className="lib-topbar">
+        <button
+          className={'folder-current' + (treeOpen ? ' open' : '')}
+          onClick={() => hasFolders && setTreeOpen(o => !o)}
+          disabled={!hasFolders}
+          title={hasFolders ? '切换文件夹' : undefined}
+        >
+          <span className="folder-current-name">
+            <span className="folder-icon">{selectedCol === null ? '📚' : '📂'}</span>{currentName}
+          </span>
+          {hasFolders && <span className="folder-chevron">▾</span>}
+        </button>
+        <button className="lib-add-btn" title="添加论文（DOI / arXiv / PDF）" onClick={() => setShowAdd(true)}>＋</button>
+      </div>
+      {showAdd && <AddPaperModal onClose={() => setShowAdd(false)} onAdded={handleAdded} />}
       {treeOpen && (
         <ul className="folder-tree">
           <li>
