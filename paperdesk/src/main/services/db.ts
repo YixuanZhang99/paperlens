@@ -61,6 +61,31 @@ export function migrate(db: DatabaseType.Database): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_highlights_paper ON highlights(paper_key);
+
+    -- ── PaperDesk 自建文献库(L1)：本地三表为事实来源,Zotero 降级为一次性导入源 ──
+    CREATE TABLE IF NOT EXISTS lib_papers (
+      key        TEXT PRIMARY KEY,
+      title      TEXT NOT NULL,
+      authors    TEXT NOT NULL DEFAULT '[]',
+      year       INTEGER,
+      abstract   TEXT NOT NULL DEFAULT '',
+      doi        TEXT,
+      arxiv_id   TEXT,
+      pdf_path   TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lib_folders (
+      id        TEXT PRIMARY KEY,
+      name      TEXT NOT NULL,
+      parent_id TEXT,
+      sort      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS lib_paper_folders (
+      paper_key TEXT NOT NULL,
+      folder_id TEXT NOT NULL,
+      PRIMARY KEY (paper_key, folder_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lpf_folder ON lib_paper_folders(folder_id);
   `)
 
   // 旧库迁移
