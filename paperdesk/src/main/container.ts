@@ -15,6 +15,7 @@ import { createZoteroLocal } from './services/zotero-local'
 import { createAiChat } from './services/ai-chat'
 import { createNotionSync } from './services/notion-sync'
 import { createEmbedder } from './services/embedder'
+import { createLibraryRepo } from './services/library-repo'
 
 export function createContainer() {
   const userData = app.getPath('userData')
@@ -40,6 +41,10 @@ export function createContainer() {
 
   const db = new Database(join(userData, 'paperlens.db'))
   migrate(db)
+  // 本地文献库(L1):lib_* 三表为事实来源;PDF 自管在 userData/library/
+  const libraryDir = join(userData, 'library')
+  fs.mkdirSync(libraryDir, { recursive: true })
+  const library = createLibraryRepo({ db })
   const notesRepo = createNotesRepo({
     db,
     now: () => Date.now(),
@@ -91,6 +96,6 @@ export function createContainer() {
     join: (...parts) => join(...parts),
   })
 
-  return { configStore, db, notesRepo, chatRepo, highlightsRepo, embedder, zotero, ai, notion, zoteroLocal }
+  return { configStore, db, notesRepo, chatRepo, highlightsRepo, embedder, library, libraryDir, zotero, ai, notion, zoteroLocal }
 }
 export type Container = ReturnType<typeof createContainer>
