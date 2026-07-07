@@ -74,12 +74,31 @@ describe('importFromZotero', () => {
     expect(r.pdfs).toBe(1)
   })
 
-  it('is idempotent (second run does not duplicate) and reports progress', async () => {
+  it('is idempotent and INCREMENTAL: re-run touches nothing existing (protects user edits)', async () => {
+    const { deps } = makeDeps()
+    const r1 = await importFromZotero(deps)
+    expect(r1.papers).toBe(2)
+    // 用户在 PaperDesk 里改了元数据与归属
+    repo.updatePaper('K1', { title: '用户改过的标题', authors: ['我'], year: 2000, abstract: 'x' })
+    repo.setPaperFolders('K1', ['C1'])
+    const r2 = await importFromZotero(deps)
+    expect(r2.papers).toBe(0)  // 无新增
+    expect(r2.folders).toBe(0)
+    expect(repo.countPapers()).toBe(2)
+    // 用户编辑不被 Zotero 版本覆盖
+    expect(repo.listPapers().find(p => p.key === 'K1')?.title).toBe('用户改过的标题')
+    expect(repo.getPaperFolders('K1')).toEqual(['C1'])
+    expect(deps.onProgress).toHaveBeenCalled()
+  })
+
+  it('re-run still backfills PDFs for papers that lack one', async () => {
     const { deps } = makeDeps()
     await importFromZotero(deps)
-    await importFromZotero(deps)
-    expect(repo.countPapers()).toBe(2)
-    expect(repo.listPapers('C2').length).toBe(2)
-    expect(deps.onProgress).toHaveBeenCalled()
+    expect(repo.getPdfFile('K1')).toBe('K1.pdf')
+    // 模拟 K1 丢了 PDF 记录 → 重跑应补回;已有 PDF 的不重写
+    ;(deps.writePdf as ReturnType<typeof vi.fn>).mockClear()
+    const r2 = await importFromZotero(deps)
+    expect(deps.writePdf).not.toHaveBeenCalled() // K1 已有 PDF,不动
+    expect(r2.pdfs).toBe(0)
   })
 })

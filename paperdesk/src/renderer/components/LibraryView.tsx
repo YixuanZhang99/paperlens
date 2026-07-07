@@ -124,7 +124,7 @@ function EditPaperModal({ paper, folders, onClose, onSaved, onDeleted }: {
   paper: Paper
   folders: ZoteroCollection[]
   onClose: () => void
-  onSaved: () => void
+  onSaved: (updated: Paper) => void
   onDeleted: (key: string) => void
 }) {
   const [title, setTitle] = useState(paper.title)
@@ -147,14 +147,14 @@ function EditPaperModal({ paper, folders, onClose, onSaved, onDeleted }: {
     if (!title.trim() || busy) return
     setBusy(true); setErr(null)
     try {
+      const parsedAuthors = authors.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+      const parsedYear = year.trim() ? Number(year.trim()) : null
       await window.api.updatePaper({
-        key: paper.key, title: title.trim(),
-        authors: authors.split(/[,，]/).map(s => s.trim()).filter(Boolean),
-        year: year.trim() ? Number(year.trim()) : null,
-        abstract,
+        key: paper.key, title: title.trim(), authors: parsedAuthors, year: parsedYear, abstract,
       })
       await window.api.setPaperFolders(paper.key, [...memberIds])
-      onSaved()
+      // 回传更新后的对象:父组件据此刷新 App.selected,阅读器/对话标题即时生效
+      onSaved({ ...paper, title: title.trim(), authors: parsedAuthors, year: parsedYear, abstract })
       onClose()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
@@ -226,7 +226,10 @@ export function LibraryView({ onSelect, selectedKey, onDeleted }: { onSelect: (p
   const [newFolderName, setNewFolderName] = useState('')
 
   const refreshFolders = () => window.api.listCollections().then(setCollections).catch(() => {})
-  const refreshPapers = async () => setPapers(await window.api.listPapers(selectedCol).catch(() => []))
+  const refreshPapers = async () => {
+    try { setPapers(await window.api.listPapers(selectedCol)) }
+    catch { /* 刷新失败保持现有列表,避免误显「文献库是空的」迁移引导 */ }
+  }
 
   async function submitRename(id: string) {
     if (!renameVal.trim()) { setRenamingId(null); return }
@@ -370,7 +373,7 @@ export function LibraryView({ onSelect, selectedKey, onDeleted }: { onSelect: (p
           paper={editPaper}
           folders={collections}
           onClose={() => setEditPaper(null)}
-          onSaved={() => { refreshPapers() }}
+          onSaved={p => { refreshPapers(); if (p.key === selectedKey) onSelect(p) }}
           onDeleted={key => { refreshPapers(); onDeleted?.(key) }}
         />
       )}

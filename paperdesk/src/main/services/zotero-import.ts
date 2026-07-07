@@ -20,23 +20,32 @@ export interface ZoteroImportDeps {
 export async function importFromZotero(
   deps: ZoteroImportDeps,
 ): Promise<{ papers: number; folders: number; pdfs: number; pdfMissing: number }> {
-  // 1) 文件夹树
-  const cols = await deps.zotero.listCollections()
-  for (const c of cols) deps.repo.upsertFolder({ id: c.key, name: c.name, parentId: c.parentKey })
+  // 重复导入语义:已存在的论文/文件夹完全跳过(保护用户在 PaperDesk 里的编辑与归属调整),
+  // 只增量导入新条目;PDF 仅对「库里还没有 PDF」的论文补齐。
+  const existingPapers = new Set(deps.repo.listPapers().map(p => p.key))
+  const existingFolders = new Set(deps.repo.listFolders().map(f => f.key))
 
-  // 2) 全部论文(key 沿用)
+  // 1) 文件夹树(仅新增)
+  const cols = await deps.zotero.listCollections()
+  const newCols = cols.filter(c => !existingFolders.has(c.key))
+  for (const c of newCols) deps.repo.upsertFolder({ id: c.key, name: c.name, parentId: c.parentKey })
+
+  // 2) 论文(key 沿用,仅新增)
   const papers = await deps.zotero.listPapers()
+  const newPapers = papers.filter(p => !existingPapers.has(p.key))
   const now = Date.now()
-  papers.forEach((p, i) => deps.repo.upsertPaper({
+  newPapers.forEach((p, i) => deps.repo.upsertPaper({
     key: p.key, title: p.title, authors: p.authors, year: p.year, abstract: p.abstract,
     // 递减毫秒保持 Zotero 返回顺序(其序≈最近修改优先)在 created_at DESC 下稳定
     createdAt: now - i,
   }))
 
-  // 3) 归属:逐 collection 查成员,聚合 paper → folderIds(多对多)
+  // 3) 归属:逐 collection 查成员,聚合 paper → folderIds(多对多;仅新论文,不动已有论文的归属)
+  const newKeys = new Set(newPapers.map(p => p.key))
   const memberships = new Map<string, string[]>()
   for (const c of cols) {
     for (const p of await deps.zotero.listPapers(c.key)) {
+      if (!newKeys.has(p.key)) continue
       const list = memberships.get(p.key) ?? []
       list.push(c.key)
       memberships.set(p.key, list)
@@ -44,10 +53,11 @@ export async function importFromZotero(
   }
   for (const [paperKey, folderIds] of memberships) deps.repo.setPaperFolders(paperKey, folderIds)
 
-  // 4) PDF:local → web → missing
+  // 4) PDF:仅对库里尚无 PDF 的论文尝试(local → web → missing)
   let pdfs = 0, pdfMissing = 0, done = 0
   for (const p of papers) {
     try {
+      if (deps.repo.getPdfFile(p.key)) continue // 已有 PDF,不动
       const info = await deps.zotero.findPdfAttachmentInfo(p.key)
       if (!info) { pdfMissing++; continue }
       let bytes: Uint8Array | null = null
@@ -66,5 +76,5 @@ export async function importFromZotero(
     }
   }
 
-  return { papers: papers.length, folders: cols.length, pdfs, pdfMissing }
+  return { papers: newPapers.length, folders: newCols.length, pdfs, pdfMissing }
 }

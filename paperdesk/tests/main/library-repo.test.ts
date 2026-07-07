@@ -74,6 +74,19 @@ describe('management (L3)', () => {
     expect(repo.getPdfFile('P1')).toBe('P1.pdf') // 不被 update 抹掉
   })
 
+  it('updatePaper cascades the new title into chunks.paper_title (KB source chips)', () => {
+    repo.upsertPaper(p1)
+    db.prepare(`INSERT INTO chunks (paper_key, paper_title, seq, text, page_index) VALUES ('P1','论文一',0,'内容',1)`).run()
+    repo.updatePaper('P1', { title: '新标题', authors: [], year: null, abstract: '' })
+    expect((db.prepare(`SELECT paper_title FROM chunks WHERE paper_key='P1'`).get() as { paper_title: string }).paper_title).toBe('新标题')
+  })
+
+  it('getPaperByKey returns the mapped paper or null', () => {
+    repo.upsertPaper(p1)
+    expect(repo.getPaperByKey('P1')?.title).toBe('论文一')
+    expect(repo.getPaperByKey('NOPE')).toBeNull()
+  })
+
   it('deletePaper removes the paper and its folder memberships', () => {
     repo.upsertPaper(p1)
     repo.upsertFolder({ id: 'F1', name: 'A' })

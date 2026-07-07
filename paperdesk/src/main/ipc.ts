@@ -318,6 +318,10 @@ export function registerIpc(c: Container) {
   })
 
   // —— 入库(L2)：DOI/arXiv 引用入库、拖 PDF 入库、手动元数据 ——
+  // paperKey 会拼进文件路径(library/<key>.pdf),白名单校验防路径穿越(合法 key 恒为大写字母数字)
+  const assertSafeKey = (k: string): void => {
+    if (!/^[A-Z0-9]{1,32}$/.test(k)) throw new Error('非法论文标识')
+  }
   const genPaperKey = (): string => {
     for (;;) {
       const key = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
@@ -325,7 +329,7 @@ export function registerIpc(c: Container) {
     }
   }
   const paperByKey = (key: string): Paper => {
-    const p = c.library.listPapers().find(x => x.key === key)
+    const p = c.library.getPaperByKey(key)
     if (!p) throw new Error('论文入库后读取失败')
     return p
   }
@@ -334,7 +338,10 @@ export function registerIpc(c: Container) {
   ipcMain.handle('paper:addByRef', async (_e, input: string) => {
     const ref = parseRefInput(input)
     if (ref.kind === 'unknown') throw new Error('无法识别输入。请粘贴 DOI(10.xxxx/…)或 arXiv 编号(如 2405.12345)/链接')
-    const meta = ref.kind === 'arxiv' ? await fetchArxivMeta(ref.id, fetch) : await fetchCrossrefMeta(ref.doi, fetch)
+    // 元数据 20s / PDF 60s 超时:外网卡死时不让「添加论文」弹窗永久 busy
+    const fetch20 = ((url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+      fetch(url, { ...init, signal: AbortSignal.timeout(20_000) })) as typeof fetch
+    const meta = ref.kind === 'arxiv' ? await fetchArxivMeta(ref.id, fetch20) : await fetchCrossrefMeta(ref.doi, fetch20)
     const key = genPaperKey()
     c.library.upsertPaper({
       key, title: meta.title, authors: meta.authors, year: meta.year, abstract: meta.abstract,
@@ -343,7 +350,7 @@ export function registerIpc(c: Container) {
     let pdf = false
     if (meta.pdfUrl) {
       try {
-        const res = await fetch(meta.pdfUrl)
+        const res = await fetch(meta.pdfUrl, { signal: AbortSignal.timeout(60_000) })
         if (res.ok) {
           const bytes = new Uint8Array(await res.arrayBuffer())
           if (bytes.length > 1000) {
@@ -378,12 +385,15 @@ export function registerIpc(c: Container) {
 
   // 给论文挂 PDF(拖入):写 library/<key>.pdf 并失效正文缓存
   ipcMain.handle('paper:attachPdf', async (_e, a: { paperKey: string; bytes: ArrayBuffer }) => {
+    assertSafeKey(a.paperKey)
     const bytes = new Uint8Array(a.bytes)
     if (bytes.length < 100) throw new Error('PDF 文件无效')
     const file = `${a.paperKey}.pdf`
     fs.writeFileSync(join(c.libraryDir, file), bytes)
     c.library.setPaperPdf(a.paperKey, file)
+    // 替换 PDF 后旧索引块必须清掉(kb:index 按「已索引跳过」,不清则知识库永远是旧内容)
     c.db.prepare('DELETE FROM pdf_cache WHERE attachment_key = ?').run(a.paperKey)
+    c.db.prepare('DELETE FROM chunks WHERE paper_key = ?').run(a.paperKey)
     pagedTextCache.delete(a.paperKey)
   })
 
@@ -412,6 +422,7 @@ export function registerIpc(c: Container) {
 
   // 删除论文：级联清笔记/高亮/对话/索引块(FTS 触发器同步)/正文缓存/归属 + PDF 文件
   ipcMain.handle('paper:delete', (_e, paperKey: string) => {
+    assertSafeKey(paperKey)
     const pdfFile = c.library.getPdfFile(paperKey)
     const cascade = c.db.transaction((key: string) => {
       c.db.prepare('DELETE FROM notes WHERE paper_key = ?').run(key)

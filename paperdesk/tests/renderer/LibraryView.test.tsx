@@ -202,7 +202,9 @@ describe('LibraryView', () => {
       getPaperFolders: vi.fn(async () => ['C1']),
       updatePaper, setPaperFolders, deletePaper,
     })
-    render(<LibraryView onSelect={vi.fn()} selectedKey={null} onDeleted={onDeleted} />)
+    const onSelect = vi.fn()
+    // P1 正是当前选中的论文 → 保存后应把更新对象回传给 onSelect(App.selected 才会刷新)
+    render(<LibraryView onSelect={onSelect} selectedKey="P1" onDeleted={onDeleted} />)
     await screen.findByText('Transformer')
 
     fireEvent.click(screen.getAllByTitle('编辑论文')[0])
@@ -213,6 +215,8 @@ describe('LibraryView', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(updatePaper).toHaveBeenCalledWith(expect.objectContaining({ key: 'P1', title: 'Transformer v2' })))
     await waitFor(() => expect(setPaperFolders).toHaveBeenCalledWith('P1', expect.arrayContaining(['C1', 'C2'])))
+    // 更新对象回传,标题即时生效
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ key: 'P1', title: 'Transformer v2' })))
 
     // 再开编辑做两步删除
     fireEvent.click(screen.getAllByTitle('编辑论文')[0])

@@ -89,6 +89,12 @@ export function createLibraryRepo(deps: { db: DatabaseType.Database }) {
     return r?.pdf_path ?? null
   }
 
+  function getPaperByKey(key: string): Paper | null {
+    const r = db.prepare('SELECT key, title, authors, year, abstract FROM lib_papers WHERE key = ?')
+      .get(key) as { key: string; title: string; authors: string; year: number | null; abstract: string } | undefined
+    return r ? rowToPaper(r) : null
+  }
+
   function countPapers(): number {
     return (db.prepare('SELECT COUNT(*) AS n FROM lib_papers').get() as { n: number }).n
   }
@@ -98,6 +104,8 @@ export function createLibraryRepo(deps: { db: DatabaseType.Database }) {
   function updatePaper(key: string, m: { title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }): void {
     db.prepare('UPDATE lib_papers SET title = ?, authors = ?, year = ?, abstract = ?, doi = ? WHERE key = ?')
       .run(m.title, JSON.stringify(m.authors), m.year ?? null, m.abstract, m.doi ?? null, key)
+    // 级联同步知识库块的冗余标题,否则改名后 KB 来源 chip 一直显示旧标题
+    db.prepare('UPDATE chunks SET paper_title = ? WHERE paper_key = ?').run(m.title, key)
   }
 
   const deletePaperTx = db.transaction((key: string) => {
@@ -143,7 +151,7 @@ export function createLibraryRepo(deps: { db: DatabaseType.Database }) {
   }
 
   return {
-    listPapers, listFolders, upsertPaper, upsertFolder, setPaperFolders, setPaperPdf, getPdfFile, countPapers,
+    listPapers, listFolders, upsertPaper, upsertFolder, setPaperFolders, setPaperPdf, getPdfFile, getPaperByKey, countPapers,
     updatePaper, deletePaper, getPaperFolders, addFolder, renameFolder, deleteFolder,
   }
 }
