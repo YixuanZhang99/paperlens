@@ -43,13 +43,11 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
   // 高亮标注
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [color, setColor] = useState(HIGHLIGHT_COLORS[0].hex)
+  const [hlMsg, setHlMsg] = useState<string | null>(null) // 高亮保存失败等瞬时提示
   const [activeHl, setActiveHl] = useState<{ hl: Highlight; x: number; y: number } | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const noteRef = useRef<HTMLTextAreaElement>(null)
 
-  const unsyncedCount = highlights.filter(h => !h.zoteroKey).length
 
   // 载入该论文已有高亮
   useEffect(() => {
@@ -336,7 +334,7 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
       try {
         created.push(await window.api.addHighlight({ paperKey, pageIndex, rects, text, color }))
       } catch (e) {
-        setSyncMsg('保存高亮失败：' + (e instanceof Error ? e.message : String(e)))
+        setHlMsg('保存高亮失败：' + (e instanceof Error ? e.message : String(e)))
       }
     }
     if (created.length === 0) return
@@ -383,22 +381,6 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
     setActiveHl({ hl, x: br.left - vr.left, y: br.bottom - vr.top + 4 })
   }
 
-  async function syncToZotero() {
-    setSyncing(true)
-    setSyncMsg(null)
-    try {
-      const { synced, failed } = await window.api.syncHighlights(paperKey)
-      setHighlights(await window.api.listHighlights(paperKey))
-      setSyncMsg(failed ? `已同步 ${synced} 条，${failed} 条失败` : `已同步 ${synced} 条到 Zotero ✓`)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setSyncMsg(/403|write|permission/i.test(msg)
-        ? '同步失败：Zotero key 无写权限。请到 zotero.org/settings/keys 给 key 勾选「Allow write access」。'
-        : '同步失败：' + msg)
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   return (
     <div className="pdf-viewer" ref={viewerRef}>
@@ -420,14 +402,8 @@ export default function PdfCanvas({ data, paperKey, onAskSelection }: {
         <button aria-label="下一个" onClick={() => moveCur(1)} disabled={hits.length === 0}>›</button>
         <span className="pdf-toolbar-sep" />
         <span className="pdf-hl-count" title="高亮标注数">🖍️ {highlights.length}</span>
-        <button
-          className="pdf-sync-btn"
-          onClick={syncToZotero}
-          disabled={syncing || unsyncedCount === 0}
-          title="把未同步的高亮推送到 Zotero（需写权限 key）"
-        >{syncing ? '同步中…' : `同步Zotero${unsyncedCount ? ` (${unsyncedCount})` : ''}`}</button>
       </div>
-      {syncMsg && <div className="pdf-sync-msg" role="status" onClick={() => setSyncMsg(null)}>{syncMsg}</div>}
+      {hlMsg && <div className="pdf-sync-msg" role="status" onClick={() => setHlMsg(null)}>{hlMsg}</div>}
       <div ref={containerRef} className="pdf-pages" onClick={onPagesClick} />
 
       {sel && (

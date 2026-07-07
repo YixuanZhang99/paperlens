@@ -1,4 +1,4 @@
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, shell } from 'electron'
 import fs from 'node:fs'
 import { join } from 'node:path'
 import type { Container } from './container'
@@ -386,6 +386,10 @@ export function registerIpc(c: Container) {
     c.db.prepare('DELETE FROM pdf_cache WHERE attachment_key = ?').run(a.paperKey)
     pagedTextCache.delete(a.paperKey)
   })
+
+  // —— 文献库信息(L4)：设置页展示数据目录 + 一键在访达打开(便于手动备份) ——
+  ipcMain.handle('library:info', () => ({ dataDir: app.getPath('userData'), papers: c.library.countPapers() }))
+  ipcMain.handle('library:openDir', () => shell.openPath(app.getPath('userData')))
 
   // —— 管理(L3)：文件夹 CRUD、论文编辑/归属/级联删除 ——
   ipcMain.handle('folder:add', (_e, f: { name: string; parentId?: string | null }) => {

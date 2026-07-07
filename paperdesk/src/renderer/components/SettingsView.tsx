@@ -3,11 +3,28 @@ import type { AppConfig } from '@shared/types'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+// 文献库信息区块(L4)：数据目录展示 + 打开(便于手动备份)
+function LibrarySection() {
+  const [info, setInfo] = useState<{ dataDir: string; papers: number } | null>(null)
+  useEffect(() => { window.api.libraryInfo().then(setInfo).catch(() => {}) }, [])
+  return (
+    <div className="settings-group">
+      <div className="settings-group-title">🗂 文献库（本地自管）</div>
+      <div className="settings-field">
+        <small className="settings-hint">
+          {info ? `共 ${info.papers} 篇论文；数据与 PDF 存于：${info.dataDir}` : '加载中…'}
+        </small>
+        <button style={{ justifySelf: 'start' }} onClick={() => window.api.openLibraryDir()}>打开数据目录（便于备份）</button>
+      </div>
+    </div>
+  )
+}
+
 type Field = { key: keyof AppConfig; label: string; secret?: boolean; hint?: string }
 
 const ZOTERO_FIELDS: Field[] = [
   { key: 'zoteroUserId', label: 'User ID' },
-  { key: 'zoteroApiKey', label: 'API Key', secret: true, hint: '需高亮同步时勾选 Allow write access' },
+  { key: 'zoteroApiKey', label: 'API Key', secret: true, hint: '只读权限即可（仅迁移导入用）' },
   { key: 'zoteroDataDir', label: '数据目录', hint: '留空 = 默认 ~/Zotero' },
 ]
 const DEEPSEEK_FIELDS: Field[] = [
@@ -48,8 +65,10 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
       <h2>设置</h2>
       {error && <div role="alert" className="alert-banner">{error}</div>}
 
+      <LibrarySection />
+
       <div className="settings-group">
-        <div className="settings-group-title">📚 Zotero 文献库</div>
+        <div className="settings-group-title">📥 从 Zotero 导入（一次性，迁移用）</div>
         {ZOTERO_FIELDS.map(renderField)}
       </div>
 
