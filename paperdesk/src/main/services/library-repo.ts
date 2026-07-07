@@ -1,4 +1,5 @@
 import type DatabaseType from 'better-sqlite3'
+import { randomUUID } from 'node:crypto'
 import type { Paper, ZoteroCollection } from '@shared/types'
 
 // PaperDesk 自建文献库(L1)：lib_* 三表的读写仓库。
@@ -92,7 +93,59 @@ export function createLibraryRepo(deps: { db: DatabaseType.Database }) {
     return (db.prepare('SELECT COUNT(*) AS n FROM lib_papers').get() as { n: number }).n
   }
 
-  return { listPapers, listFolders, upsertPaper, upsertFolder, setPaperFolders, setPaperPdf, getPdfFile, countPapers }
+  // —— 管理(L3) ——
+
+  function updatePaper(key: string, m: { title: string; authors: string[]; year: number | null; abstract: string; doi?: string | null }): void {
+    db.prepare('UPDATE lib_papers SET title = ?, authors = ?, year = ?, abstract = ?, doi = ? WHERE key = ?')
+      .run(m.title, JSON.stringify(m.authors), m.year ?? null, m.abstract, m.doi ?? null, key)
+  }
+
+  const deletePaperTx = db.transaction((key: string) => {
+    db.prepare('DELETE FROM lib_paper_folders WHERE paper_key = ?').run(key)
+    db.prepare('DELETE FROM lib_papers WHERE key = ?').run(key)
+  })
+  function deletePaper(key: string): void {
+    deletePaperTx(key)
+  }
+
+  function getPaperFolders(paperKey: string): string[] {
+    return (db.prepare('SELECT folder_id FROM lib_paper_folders WHERE paper_key = ?').all(paperKey) as Array<{ folder_id: string }>)
+      .map(r => r.folder_id)
+  }
+
+  const genFolderId = (): string => {
+    for (;;) {
+      const id = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+      if (!db.prepare('SELECT 1 FROM lib_folders WHERE id = ?').get(id)) return id
+    }
+  }
+
+  function addFolder(f: { name: string; parentId?: string | null }): ZoteroCollection {
+    const id = genFolderId()
+    upsertFolder({ id, name: f.name, parentId: f.parentId ?? null })
+    return { key: id, name: f.name, parentKey: f.parentId ?? null }
+  }
+
+  function renameFolder(id: string, name: string): void {
+    db.prepare('UPDATE lib_folders SET name = ? WHERE id = ?').run(name, id)
+  }
+
+  // 删除文件夹：子文件夹上提一级(parent 置为被删者的 parent)；论文只解除归属
+  const deleteFolderTx = db.transaction((id: string) => {
+    const row = db.prepare('SELECT parent_id FROM lib_folders WHERE id = ?').get(id) as { parent_id: string | null } | undefined
+    if (!row) return
+    db.prepare('UPDATE lib_folders SET parent_id = ? WHERE parent_id = ?').run(row.parent_id, id)
+    db.prepare('DELETE FROM lib_paper_folders WHERE folder_id = ?').run(id)
+    db.prepare('DELETE FROM lib_folders WHERE id = ?').run(id)
+  })
+  function deleteFolder(id: string): void {
+    deleteFolderTx(id)
+  }
+
+  return {
+    listPapers, listFolders, upsertPaper, upsertFolder, setPaperFolders, setPaperPdf, getPdfFile, countPapers,
+    updatePaper, deletePaper, getPaperFolders, addFolder, renameFolder, deleteFolder,
+  }
 }
 
 export type LibraryRepo = ReturnType<typeof createLibraryRepo>

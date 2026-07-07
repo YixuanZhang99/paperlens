@@ -62,3 +62,54 @@ describe('folders', () => {
     expect(repo.listPapers(null).length).toBe(2) // null=全部
   })
 })
+
+describe('management (L3)', () => {
+  it('updatePaper edits metadata but keeps pdf_path and created_at', () => {
+    repo.upsertPaper({ ...p1, pdfPath: 'P1.pdf' })
+    repo.updatePaper('P1', { title: '改后', authors: ['王五'], year: 2020, abstract: '新摘要', doi: '10.9/z' })
+    const p = repo.listPapers()[0]
+    expect(p.title).toBe('改后')
+    expect(p.authors).toEqual(['王五'])
+    expect(p.year).toBe(2020)
+    expect(repo.getPdfFile('P1')).toBe('P1.pdf') // 不被 update 抹掉
+  })
+
+  it('deletePaper removes the paper and its folder memberships', () => {
+    repo.upsertPaper(p1)
+    repo.upsertFolder({ id: 'F1', name: 'A' })
+    repo.setPaperFolders('P1', ['F1'])
+    repo.deletePaper('P1')
+    expect(repo.countPapers()).toBe(0)
+    expect(repo.getPaperFolders('P1')).toEqual([])
+  })
+
+  it('addFolder generates an id and returns collection shape; child under parent', () => {
+    const top = repo.addFolder({ name: '新文件夹' })
+    expect(top.key).toMatch(/^[A-Z0-9]{8}$/)
+    expect(top).toMatchObject({ name: '新文件夹', parentKey: null })
+    const child = repo.addFolder({ name: '子', parentId: top.key })
+    expect(child.parentKey).toBe(top.key)
+  })
+
+  it('renameFolder renames; deleteFolder lifts children one level and clears memberships', () => {
+    const a = repo.addFolder({ name: 'A' })
+    const b = repo.addFolder({ name: 'B', parentId: a.key })
+    const c = repo.addFolder({ name: 'C', parentId: b.key })
+    repo.upsertPaper(p1)
+    repo.setPaperFolders('P1', [b.key])
+    repo.renameFolder(b.key, 'B2')
+    expect(repo.listFolders().find(f => f.key === b.key)?.name).toBe('B2')
+    repo.deleteFolder(b.key)
+    const folders = repo.listFolders()
+    expect(folders.find(f => f.key === b.key)).toBeUndefined()
+    expect(folders.find(f => f.key === c.key)?.parentKey).toBe(a.key) // C 上提到 A 下
+    expect(repo.getPaperFolders('P1')).toEqual([]) // 归属清掉
+  })
+
+  it('getPaperFolders returns current membership ids', () => {
+    repo.upsertPaper(p1)
+    repo.upsertFolder({ id: 'F1', name: 'A' }); repo.upsertFolder({ id: 'F2', name: 'B' })
+    repo.setPaperFolders('P1', ['F1', 'F2'])
+    expect(repo.getPaperFolders('P1').sort()).toEqual(['F1', 'F2'])
+  })
+})
