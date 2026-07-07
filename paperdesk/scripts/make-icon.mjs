@@ -6,25 +6,25 @@ const OUT = '/Users/zhangyixuan06/work/paperdesk/build/icon-1024.png'
 const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="bg" x1="80" y1="30" x2="960" y2="1010" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1652E6"/>
-      <stop offset="0.52" stop-color="#2C7BF2"/>
-      <stop offset="1" stop-color="#1EB5EC"/>
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="0.52" stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
     </linearGradient>
     <radialGradient id="glass" cx="0.36" cy="0.28" r="0.9">
       <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.60"/>
       <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.20"/>
-      <stop offset="1" stop-color="#CDEBFF" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#CCFBF1" stop-opacity="0.10"/>
     </radialGradient>
     <linearGradient id="ring" x1="672" y1="478" x2="672" y2="826" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#CFE7FF"/>
+      <stop offset="1" stop-color="#D5F7F1"/>
     </linearGradient>
     <linearGradient id="handle" x1="792" y1="772" x2="918" y2="898" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#BFDCFF"/>
+      <stop offset="1" stop-color="#BFF3EA"/>
     </linearGradient>
     <filter id="ds" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0B2A6B" flood-opacity="0.40"/>
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#134E4A" flood-opacity="0.40"/>
     </filter>
     <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="9"/>
@@ -38,7 +38,7 @@ const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" heig
   <!-- glossy top sheen + lower shade (glassmorphism depth) -->
   <g clip-path="url(#sq)">
     <ellipse cx="412" cy="70" rx="640" ry="360" fill="#FFFFFF" opacity="0.18" filter="url(#soft)"/>
-    <ellipse cx="800" cy="980" rx="420" ry="300" fill="#0A3FB0" opacity="0.18" filter="url(#soft)"/>
+    <ellipse cx="800" cy="980" rx="420" ry="300" fill="#0F5F58" opacity="0.18" filter="url(#soft)"/>
   </g>
   <!-- glass card edge -->
   <rect x="6" y="6" width="1012" height="1012" rx="225" ry="225" fill="none" stroke="#FFFFFF" stroke-opacity="0.30" stroke-width="3"/>
@@ -65,8 +65,8 @@ const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="1024" heig
   <!-- magnified lines inside lens -->
   <clipPath id="lens"><circle cx="672" cy="652" r="146"/></clipPath>
   <g clip-path="url(#lens)">
-    <rect x="560" y="612" width="236" height="30" rx="15" fill="#2C7BF2" opacity="0.55"/>
-    <rect x="560" y="668" width="150" height="30" rx="15" fill="#2C7BF2" opacity="0.38"/>
+    <rect x="560" y="612" width="236" height="30" rx="15" fill="#14B8A6" opacity="0.55"/>
+    <rect x="560" y="668" width="150" height="30" rx="15" fill="#14B8A6" opacity="0.38"/>
     <!-- bottom rim ambient light -->
     <path d="M540 760 A150 150 0 0 0 804 760" fill="none" stroke="#EAF6FF" stroke-width="14" opacity="0.45" filter="url(#soft)"/>
   </g>
